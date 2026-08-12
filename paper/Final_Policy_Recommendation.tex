@@ -1,0 +1,214 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\usepackage{float}
+\usepackage{titlesec}
+\usepackage[bottom]{footmisc}
+\usepackage{xcolor}
+\usepackage{tikz}
+
+
+\definecolor{gwblue}{HTML}{033C5A}
+
+\onehalfspacing
+\setlength{\parskip}{1.0em}
+\setlength{\parindent}{0pt}
+\titlespacing*{\section}{0pt}{1.2ex plus 0.5ex minus 0.2ex}{0.8ex plus 0.2ex}
+\titlespacing*{\subsection}{0pt}{1.0ex plus 0.5ex minus 0.2ex}{0.6ex plus 0.2ex}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{\fill}
+{\color{gwblue}\rule{0.7\textwidth}{1.2pt}}\\[1em]
+{\color{gwblue}\Huge\bfseries TITLE\par}
+\vspace{0.6em}
+{\color{gwblue}\LARGE\itshape SUBTITLE\\ in Medical De-Identification\par}
+\vspace{0.8em}
+{\color{gwblue}\rule{0.7\textwidth}{1.2pt}}
+\vspace*{\fill}
+
+\begin{tabular*}{0.85\textwidth}{@{\extracolsep{\fill}} l r}
+\textbf{name} & \itshape other\\
+uni & 2026 \\
+\end{tabular*}
+
+\vspace{1em}
+{\color{gwblue}\rule{\textwidth}{5pt}}
+
+
+
+
+\end{titlepage}
+
+% Bottom colored bar across the full page
+
+
+% ---------- LOGOS GO HERE ----------
+% \includegraphics[height=1.6cm]{logo1.png}\hspace{1.5cm}%
+% \includegraphics[height=1.6cm]{logo2.png}
+% -----------------------------------
+
+
+
+
+\section*{Executive Summary}
+\addcontentsline{toc}{section}{Executive Summary}
+
+Artificial intelligence in medical imaging has moved from research into daily clinical use. These tools are reading scans and shaping diagnoses in real clinical settings, however their performance is limited by the data they were trained on. That training data has a persistent gap. HIPAA's de-identification standard offers institutions two pathways, Safe Harbor and Expert Determination, but neither provides a provable, permanent, and easily repeatable method for removing identifying information. Facing compliance burden and liability, institutions take the path of least resistance and strip out quasi-identifying details such as age, dates, geography, race, and ethnicity. This is the same information medical AI needs to be accurate and to be audited for bias.
+
+The consequences are visible in practice. A systematic review found that 81\% of radiology deep-learning algorithms lost accuracy on external data. Systems trained on underrepresented groups perform measurably worse for those groups. Children make up less than 2\% of patients in public imaging datasets, with a third of those datasets recording no patient age at all, leaving the resulting bias impossible to even measure. The de-identification bottleneck produces a pipeline of models that underperform in clinical settings, especially on underrepresented patient populations.
+
+Differential privacy offers a middle path. It protects individuals by adding a calibrated amount of statistical noise to data releases and provides a mathematical guarantee that holds even against attacks not yet invented. It is already deployed at national and commercial scale by the U.S. Census Bureau, Apple, and Google. Applied to the demographic and tabular records that travel alongside medical images, rather than to the diagnostic content of the scans, it gives institutions a defensible, repeatable way to share the detail that representativeness checks and bias audits require.
+
+This paper advocates for an official framework for de-identifying patient health information with differential privacy. The HHS Office for Civil Rights should issue guidance recognizing differential privacy as an accepted de-identification method, turning an expert-by-expert exercise into a repeatable standard. Second, the FDA should integrate differentially private data sharing into its framework for AI-enabled medical devices, where it would help manufacturers meet the agency's existing expectations for representative, bias-audited data. Together, these steps would turn a capable but underused tool into standard practice.
+\newpage
+\begingroup
+\begin{spacing}{0.8}
+\tableofcontents
+\end{spacing}
+\endgroup
+\newpage
+
+\section{The De-Identification Bottleneck Behind Failing Medical AI}
+
+Artificial intelligence has become a working part of medical imaging, but the tools reaching clinicians are only as reliable as the data behind them. Today, that data is systematically incomplete. The problem originates in the rules that govern how patient data can be shared. HIPAA's de-identification standard gives institutions no provable, permanent, or easily repeatable way to remove identifying information, so the safest course is to strip out the demographic detail that medical AI most needs in order to be accurate and to be checked for bias. What follows is a pipeline of models trained on narrow, unrepresentative data that underperform in the clinic and fail hardest on the patients they already serve worst.
+
+\subsection{The De-Identification Bottleneck}\label{sec:bottleneck}
+
+The Health Insurance Portability and Accountability Act (HIPAA) restricts how patient health information can be shared. The information it protects is called Protected Health Information (PHI), which is any health data that can be tied to a specific person. HIPAA exists to keep patients from being identified and exposed through their medical records, a necessary protection. Health information stops being PHI once it has been de-identified, meaning altered so that it can no longer be traced back to a person. HIPAA offers two ways to do this, summarized in Table~\ref{tab:methods}.\footnote{Office for Civil Rights, U.S. Department of Health and Human Services, \textit{Guidance Regarding Methods for De-identification of Protected Health Information in Accordance with the HIPAA Privacy Rule} (2012), sections 2--3.} 
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.14\textwidth} >{\raggedright\arraybackslash}p{0.37\textwidth} >{\raggedright\arraybackslash}p{0.37\textwidth}}
+\hline
+ & \textbf{Safe Harbor} & \textbf{Expert Determination} \\
+\hline
+\textbf{Approach} & Remove eighteen specified identifiers (including names, full dates, and geography below the state level), and confirm the entity has no actual knowledge that residual data could re-identify a patient. & A qualified expert applies statistical and scientific principles, judges the risk of re-identification to be very small, and documents how that conclusion was reached. \\
+\textbf{Strengths} & Simple and largely mechanical; requires no expert; the default choice for most institutions. & Flexible; can preserve far more useful detail than a fixed checklist. \\
+\textbf{Limitations} & Strips information regardless of whether it was actually risky; the actual-knowledge requirement leaves residual judgment with the institution; carries no provable, mathematical guarantee. & Requires engaging a qualified expert; not permanent---practitioners commonly issue time-limited certifications that must be revisited as the surrounding data environment changes. \\
+\hline
+\end{tabular}
+\caption{The Two Official HIPAA De-Identification Pathways}
+\label{tab:methods}
+\end{table}
+
+Notably, Safe Harbor is not a pure checklist: alongside the removal of the eighteen identifiers, it requires that the covered entity have no actual knowledge that the remaining information could be used, alone or in combination with other data, to identify a patient.\footnote{Office for Civil Rights, \textit{Guidance Regarding Methods for De-identification}, section 3 (Safe Harbor, 45 CFR \S164.514(b)(2)(ii)).} This leaves a residual judgment and liability with the institution even under the simpler Safe Harbor pathway.
+
+Institutions are therefore caught in a bind. They can over-strip their data to stay safely inside Safe Harbor, or they can commission a slower expert review that may need to be redone in the future as new information becomes available.
+% TODO (user to source): if a citation characterizing Expert Determination as slow/costly can be found, add it here to support "slower" and the recurring-cost framing.
+The path of least resistance and legal exposure is to leave useful identifiers out. The most valuable data tends to go missing for the simple reason that including it is not worth the trouble.
+
+The variables typically removed are demographic quasi-identifiers. A quasi-identifier is a piece of information that does not name a person on its own but can single someone out when combined with other data.\footnote{Simson Garfinkel et al., \textit{NIST Special Publication 800-188: De-Identifying Government Datasets: Techniques and Governance} (National Institute of Standards and Technology, 2023), doi:10.6028/NIST.SP.800-188.} Safe Harbor removes all parts of a date finer than the year and strips geographic detail below the level of a state.\footnote{Office for Civil Rights, \textit{Guidance Regarding Methods for De-identification}, section 3 (Safe Harbor identifiers, 45 CFR \S164.514(b)(2)).} HHS's own guidance underscores why institutions treat these variables so cautiously. It classifies patient demographics as high-risk features: highly distinguishing, highly replicable, and commonly present in public data sources such as birth, death, and marriage registries.\footnote{Office for Civil Rights, \textit{Guidance Regarding Methods for De-identification}, Table 1 (Principles used by experts in the determination of the identifiability of health information).} Institutions have both compliance and risk-aversion reasons to omit these fields; yet, granular age, dates, and location are precisely what a researcher needs in order to check whether a dataset represents the population it will be used on, and to audit a finished model for bias across groups. The current system forces a trade between protecting privacy and keeping the very information needed to find and fix the inequities the next section documents.
+
+\subsection{The Data That Gets Stripped Away Is What AI Needs}\label{sec:diverse-data}
+
+Deep learning systems, computer programs that learn patterns from large collections of examples, are already improving diagnostic performance in clinical practice: a systematic review of 140 studies published between 2020 and 2025 found that AI tools used in radiology produced measurable gains in diagnostic accuracy and reduced interpretation time.\footnote{Rachel Lawrence et al., ``Artificial Intelligence for Diagnostics in Radiology Practice: A Rapid Systematic Scoping Review,'' \textit{eClinicalMedicine} 83 (2025): 103228, doi:10.1016/j.eclinm.2025.103228.} These systems read computed tomography scans, magnetic resonance images, and X-rays, and they are rapidly moving into clinical use: three-quarters of the AI-enabled medical devices the FDA has authorized fall within radiology alone.\footnote{U.S. Food and Drug Administration, ``Artificial Intelligence-Enabled Medical Devices,'' accessed July 2026, \url{https://www.fda.gov/medical-devices/software-medical-device-samd/artificial-intelligence-enabled-medical-devices}.}
+
+% \footnote{Muhammad Umer Suleman et al., ``Assessing the Generalizability of Artificial Intelligence in Radiology: A Systematic Review of Performance Across Different Clinical Settings,'' \textit{Annals of Medicine \& Surgery} 87 (2025): 8803--8811, doi:10.1097/MS9.0000000000004166.} 
+
+The performance of these systems depends on the volume and quality of the data they learn from. A system trained on more images generally reaches higher accuracy.\footnote{Junghwan Cho, Kyewook Lee, Ellie Shin, Garry Choy, and Synho Do, ``How Much Data Is Needed to Train a Medical Image Deep Learning System to Achieve Necessary High Accuracy?'' arXiv:1511.06348 (2015).} However, the quality of the training data matters just as much as the quantity. A system learns only the patterns it has seen, so a training set drawn from many hospitals, scanners, and patient populations produces a system that holds up better when it meets new patient populations.\footnote{Muhammad Umer Suleman et al., ``Assessing the Generalizability of Artificial Intelligence in Radiology: A Systematic Review of Performance Across Different Clinical Settings,'' \textit{Annals of Medicine \& Surgery} 87 (2025): 8803--8811, doi:10.1097/MS9.0000000000004166.} Diverse, representative data is what allows a model to generalize---to perform well outside the single setting where it was built.
+
+When training data lacks that diversity, the consequences become visible in practice. One systematic review of 86 deep-learning algorithms in radiology found that 81\% lost accuracy on external data, and nearly a quarter dropped by at least 0.10 in AUC, a standard measure of diagnostic accuracy.\footnote{Alice C. Yu, Bahram Mohajer, and John Eng, ``External Validation of Deep Learning Algorithms for Radiologic Diagnosis: A Systematic Review,'' \textit{Radiology: Artificial Intelligence} 4, no. 3 (2022): e210064.} The failures fall hardest on patients who were underrepresented in the training data. A large study of chest X-ray systems found that when one sex was underrepresented in the training set, the system performed significantly worse for that group.\footnote{Agostina J. Larrazabal, Nicol\'as Nieto, Victoria Peterson, Diego H. Milone, and Enzo Ferrante, ``Gender Imbalance in Medical Imaging Datasets Produces Biased Classifiers for Computer-Aided Diagnosis,'' \textit{Proceedings of the National Academy of Sciences} 117, no. 23 (2020): 12592--12594, doi:10.1073/pnas.1919012117.} Children are affected in the same way. A review of 203 public imaging datasets found that children make up less than 2\% of patients, and that a third of the datasets recorded no patient age at all.\footnote{Stanley Bryan Zamora Hua et al., ``Underrepresentation of Children in Public Medical Imaging Datasets,'' \textit{Nature Health} (2026), published online April 24, 2026.} Models trained on adults misfire on children, and because the age information is missing, the bias cannot even be measured. These are significant shortfalls that can be linked to what training data institutions were able to share in the first place.
+
+\subsection{The Gap in Current Guidance}\label{sec:gap}
+
+There is no recognized standard of a provable, repeatable, and accessible method of de-identification for PHI. An institution that wants to apply a formal privacy method today must commission an expert to design and defend it from scratch, and repeat that effort every time the data environment changes. The result is that the demographic detail most useful for building and auditing medical AI stays locked away because sharing it safely is slow, has to be reinvented each time, and lacks a settled standard to point to.
+
+The federal government's own standards body has recognized the need for formal de-identification standards. In its guidance on de-identifying government datasets, the National Institute of Standards and Technology (NIST) states that assurances of low re-identification risk ``frequently cannot be made unless formal privacy techniques (e.g., differential privacy) are employed.''\footnote{Garfinkel et al., \textit{NIST SP 800-188}.} NIST's statement names the framework at the center of this proposal: differential privacy.
+
+\section{Differential Privacy as the Middle Path}
+
+\subsection{What Differential Privacy Is}
+
+Differential privacy is a scientific framework for processing data so that the identities of the people within it are protected. It works by adding a small, calibrated amount of statistical noise to the results drawn from a dataset, so that no one can re-identify a specific person using any combination of the released data.\footnote{Population Reference Bureau and U.S. Census Bureau's 2020 Census Data Products and Dissemination Team, \textit{Why the Census Bureau Chose Differential Privacy}, 2020 Census Briefs C2020BR-03 (U.S. Census Bureau, March 2023), 1.} The amount of noise is governed by a parameter called epsilon, which gives an institution a setting it can deliberately choose and record.\footnote{Garfinkel et al., \textit{NIST SP 800-188}.} 
+
+What separates differential privacy from older approaches is the mathematical, durable guarantee it provides. The Census Bureau, which adopted differential privacy for the 2020 Census, stated that even if a new type of attack is developed, the mathematics of differential privacy means the data will be equally protected against it.\footnote{Population Reference Bureau and U.S. Census Bureau, \textit{Why the Census Bureau Chose Differential Privacy}, 4.} A protection validated through expert determination by expert judgment can be undone by a technique invented the following year. A mathematical guarantee through differential privacy holds regardless of what tools an attacker later brings to bear.
+
+\subsection{What the Approach Protects, and What It Fixes}
+
+This paper proposes applying differential privacy to the demographic and clinical information that travels alongside medical images, meaning the tabular records of age, sex, race and ethnicity, dates, geography, and comorbidities. It does not propose adding noise to the pixels of a scan. This distinction matters because differential privacy addresses one specific problem: access. It solves the data-access problem described in Section~\ref{sec:bottleneck}, the reason institutions strip useful identifiers in the first place, by giving them a defensible and repeatable way to share the demographic detail that representativeness checks and bias audits require. Differential privacy does not, on its own, correct a biased model. By making the right data safe to share, it removes the barrier that produces data-starved, poorly generalizing models to begin with.
+
+\subsection{Differential Privacy in Practice}
+
+Differential privacy is already deployed at national and commercial scale. The U.S. Census Bureau used it to protect respondents in the 2020 Census, whose data determine congressional apportionment and guide the allocation of federal funds.\footnote{Population Reference Bureau and U.S. Census Bureau, \textit{Why the Census Bureau Chose Differential Privacy}, 1.} The technique has also been applied to genuinely sensitive personal input in consumer technology. Apple uses differential privacy on iOS and macOS to learn from data as sensitive as the new words users type on their keyboards.\footnote{Differential Privacy Team, Apple, ``Learning with Privacy at Scale,'' \textit{Apple Machine Learning Research}, December 2017.} Google introduced an earlier local differential privacy system, RAPPOR, to gather statistics from its Chrome browser under a formal guarantee.\footnote{\'Ulfar Erlingsson, Vasyl Pihur, and Aleksandra Korolova, ``RAPPOR: Randomized Aggregatable Privacy-Preserving Ordinal Response,'' in \textit{Proceedings of the 2014 ACM SIGSAC Conference on Computer and Communications Security} (2014), 1054--1067, doi:10.1145/2660267.2660348.} These systems collect information from hundreds of millions of people while holding to a formal privacy guarantee.
+
+The approach has reached healthcare as well, including outside the United States. Researchers in the United Kingdom applied differential privacy to a case-control study of asthma in 22,165 patients, drawn from UK Biobank records linked to electronic health records, and measured how different epsilon values affected the study's conclusions in order to guide the choice of setting.\footnote{Mehrdad A. Mizani, Aziz Sheikh, and Amitava Banerjee, ``An Empirical Assessment of Differential Privacy in Real-World Observational Data: A Case-Control Study of Asthma Exacerbation in UK Biobank Linked with Electronic Health Records,'' \textit{Journal of the American Medical Informatics Association} 32, no. 8 (2025): 1328--1339, doi:10.1093/jamia/ocaf090.} These efforts show that differential privacy is being tested on precisely the kind of linked health data this proposal concerns.
+
+\section{An Official Framework is Necessary}
+
+\subsection{Recommendation: HHS' Office for Civil Rights}
+
+HHS' Office for Civil Rights, which administers the HIPAA de-identification standard, should issue official guidance recognizing differential privacy as an accepted methodology under current HIPAA de-identification methods.\footnote{Office for Civil Rights, \textit{Guidance Regarding Methods for De-identification}, section 2 (Expert Determination method, 45 CFR \S164.514(b)(1)).} That guidance would turn what is today an individual, expert-by-expert exercise into a repeatable standard. It should describe what a defensible use of differential privacy looks like: the range of settings considered acceptable, or a documented process for justifying the value chosen; the documentation expected of institutions; and safeguards for small subgroups so that they are not lost to noise or exposed by its absence.
+
+The case for this guidance is not new. As noted in Section~\ref{sec:gap}, NIST has stated that assurances of low re-identification risk generally require formal privacy techniques such as differential privacy.\footnote{Garfinkel et al., \textit{NIST SP 800-188}.} Health researchers have made the same point. A scoping review of differential privacy in health research concluded that concrete examples of epsilon and their implications ``may also help to inform more narrowed HIPAA guidelines regarding the use of differential privacy for shared personal health data.''\footnote{Joseph Ficek, Wei Wang, Henian Chen, Getachew Dagne, and Ellen Daley, ``Differential Privacy in Health Research: A Scoping Review,'' \textit{Journal of the American Medical Informatics Association} 28, no. 10 (2021): 2269--2276, doi:10.1093/jamia/ocab135.} The demand for this guidance  already exists.
+
+\subsection{Recommendation: The Food and Drug Administration (FDA)}
+
+The second recommendation is that the FDA integrate differentially private data sharing into its framework for AI-enabled medical devices. The agency has already built the foundation for this. Its January 2025 draft guidance on AI-enabled device software functions asks manufacturers to document the lineage of their data, to show that their datasets represent the intended patient population, and to analyze and mitigate bias across the total product lifecycle.\footnote{U.S. Food and Drug Administration, \textit{Artificial Intelligence-Enabled Device Software Functions: Lifecycle Management and Marketing Submission Recommendations}, Draft Guidance for Industry and Food and Drug Administration Staff (January 7, 2025), Docket FDA-2024-D-4488.} Its AI/ML Action Plan committed the agency to developing methods for the identification and elimination of bias, and recognized the importance of devices being well suited to a racially and ethnically diverse patient population.\footnote{Center for Devices and Radiological Health, U.S. Food and Drug Administration, \textit{Artificial Intelligence/Machine Learning (AI/ML)-Based Software as a Medical Device (SaMD) Action Plan} (January 2021), 5.} The international Good Machine Learning Practice principles, which the FDA helped author, call directly for datasets that are representative of the intended patient population in terms of age, sex, race, ethnicity, and geographic location.\footnote{International Medical Device Regulators Forum, Artificial Intelligence/Machine Learning-enabled Working Group, \textit{Good Machine Learning Practice for Medical Device Development: Guiding Principles}, IMDRF/AIML WG/N88 FINAL:2025 (January 27, 2025), principle 3.}
+
+The FDA asks device makers to prove their data is representative and their models are unbiased, while the current de-identification methodology makes the data needed for that proof difficult to obtain. Differential privacy closes that loop. It gives manufacturers a defensible, auditable way to acquire and share the very data the FDA already expects them to have.
+
+\subsection{A Note on Framework Design}
+
+This paper advocates for a framework. It does not build one. That work belongs to the technical and regulatory experts the agencies would convene. One design choice worth flagging for those authors is where the noise is added. Differential privacy can be applied centrally, to aggregate or tabular releases, to synthetic datasets generated under the guarantee, or to trained models.
+
+\section{Stakeholders}
+
+\subsection{Healthcare Systems That Hold the Data}
+
+Institutions that hold patient data currently carry the cost and the liability of the bottleneck: they either over-strip data or commission expert determinations that can expire, and they bear the exposure if a release goes wrong. A recognized differentially private method changes this. It gives them a governance approach that is defensible and durable. Once data has been processed under differential privacy, the Census Bureau notes, there is no additional privacy loss regardless of how the data is later used.\footnote{Population Reference Bureau and U.S. Census Bureau, \textit{Why the Census Bureau Chose Differential Privacy}, 5.} An institution can share the data, and researchers can combine and reanalyze it, without question of whether individual privacy has been compromised. The guarantee is set once and holds. That durability lowers the recurring cost of repeated determinations and the legal concerns that may drive institutions to withhold data in the first place. It also makes multi-institution research collaborations and data-sharing that are hard to justify more practical. For the institution, data sharing becomes a documented, repeatable process with a fixed guarantee.
+
+\subsection{AI Developers and Device Makers}
+
+Developers feel the shortage of diverse data because their models are failing on external populations and underperforming on underrepresented groups. A recognized method for sharing demographic detail safely improves the data they receive. The data becomes richer, carrying the age, sex, race, ethnicity, and geographic detail needed to train a well-performing model that represents the intended patient population.\footnote{Suleman et al., ``Assessing the Generalizability,'' 8805.} That demographic detail is also what lets a developer audit a finished model for bias across groups, which regulators and purchasers expect.
+
+\subsection{Regulators}
+
+HHS' Office for Civil Rights and the FDA gain an auditable and verifiable privacy guarantee in place of a case-by-case judgment call. Differential privacy produces a quantifiable measure of protection rather than an expert's opinion that risk is very small.\footnote{Garfinkel et al., \textit{NIST SP 800-188}.} For the Office for Civil Rights, a recognized standard means fewer individual determinations to evaluate and a consistent basis for comparing how different institutions protect the same kind of data. For the FDA, the demographic detail that differential privacy makes shareable is precisely the evidence the agency already asks device makers to supply about representativeness and bias. For both agencies, a quantified guarantee is easier to review, easier to compare across institutions, and easier to defend than a narrative judgment that risk was low under Expert Determination.
+
+\subsection{Patients}
+
+Patients gain protection grounded in mathematics rather than in the limits of a particular expert's foresight. Their information is shielded by a guarantee that holds even against attacks that have not yet been invented.\footnote{Population Reference Bureau and U.S. Census Bureau, \textit{Why the Census Bureau Chose Differential Privacy}, 4.} Importantly, patients from groups historically underrepresented in medical data also gain from the better tools that safe data sharing makes possible: when their demographic information can travel safely with the data, their presence, or absence, from a dataset becomes visible.\footnote{Hua et al., ``Underrepresentation of Children in Public Medical Imaging Datasets.''} 
+
+\subsection{Clinicians}
+
+Clinicians gain tools they can trust. A model trained and validated on data that reflects the full patient population is more likely to perform accurately, rather than only for the group that happened to dominate its training data. A clinician who knows a model was built and audited on representative data can act on its output with more confidence, and is less exposed to the risk of a tool that quietly fails for a particular subgroup. As the data available for building and validating these tools becomes more representative, the gap between how a model performs in testing and how it performs in the exam room narrows.
+
+\section{Objections and Responses}
+
+\subsection{``Small Populations Are Harmed by the Noise''}
+
+Differential privacy involves a genuine tradeoff. Because privacy and accuracy move in opposite directions as the setting changes, the data for very small demographic groups or geographic areas can become too noisy to use, and may need to be combined into larger categories before release.\footnote{Population Reference Bureau and U.S. Census Bureau, \textit{Why the Census Bureau Chose Differential Privacy}, 6.} Applied carelessly, differential privacy can even widen the subgroup performance gaps that this paper is concerned with.\footnote{Marziyeh Mohammadi et al., ``Differential Privacy for Medical Deep Learning: Methods, Tradeoffs, and Deployment Implications,'' \textit{npj Digital Medicine} 9 (2026): article 93, doi:10.1038/s41746-025-02280-z.}
+
+First, the tradeoff is manageable, and it is deliberate. A review of 74 medical deep-learning studies found that differential privacy maintained clinically acceptable performance at moderate privacy settings, and did so most reliably in imaging.\footnote{Mohammadi et al., ``Differential Privacy for Medical Deep Learning.''} Because the same setting that determines how much performance is preserved also determines the strength of the privacy guarantee, this is a choice to be made carefully and documented, which is exactly why the framework should establish defensible bounds rather than leave each institution to justify a value from scratch. Second, minimum sample sizes and the aggregation of small groups can be built into the framework as safeguards, which is exactly the kind of provision the guidance should specify. Third, and most important, differential privacy makes a group's absence measurable. Under the current methodology, missing identifiers mean that institutions often cannot even tell who was left out of a dataset.\footnote{Hua et al., ``Underrepresentation of Children in Public Medical Imaging Datasets.''} A method that shares demographic detail under a formal guarantee at least makes underrepresentation visible, which is the first step toward fixing it. 
+
+\subsection{``This Can Already Be Done Under Expert Determination''}
+
+The Expert Determination pathway does not prescribe a particular method. It asks only that a qualified expert find the re-identification risk to be very small, and differential privacy can already satisfy that standard today.\footnote{On the method-agnostic nature of the pathway, see Office for Civil Rights, \textit{Guidance Regarding Methods for De-identification}, section 2; on differential privacy meeting that standard, see Garfinkel et al., \textit{NIST SP 800-188}.} The value of building a framework lies in accessibility, repeatability, auditability, and trust. Today, using differential privacy under Expert Determination requires an institution to hire an expert who can design and defend the approach from scratch, and to repeat that effort each time the data environment changes. An official framework turns an individual, expert-by-expert exercise into a recognized standard that any institution could follow with confidence.
+
+\subsection{``The Noise Ruins the Data's Research Value''}
+
+The evidence does not support this at moderate privacy settings. The same review of the medical literature found that differential privacy preserved clinically acceptable performance, particularly in imaging tasks.\footnote{Mohammadi et al., ``Differential Privacy for Medical Deep Learning.''} It is also important to recall what the framework protects. This proposal applies differential privacy to the demographic and tabular data that accompanies an image, not to the diagnostic content of the image itself. The signal a model learns to read is left intact. The noise is added only to the descriptive fields that make a patient identifiable.
+
+\subsection{``Safe Harbor Is Already Good Enough''}
+
+Safe Harbor is simple and familiar, but it carries no provable guarantee, and it weakens over time. NIST observes that prescriptive standards, like Safe Harbor, offer no mathematical assurance that following them actually protects privacy, and that they grow less effective as more external data becomes available for linkage.\footnote{Garfinkel et al., \textit{NIST SP 800-188}.} The Census Bureau demonstrated the danger concretely. In a simulation using only published 2010 Census tables, which had already been protected by traditional methods, the Bureau reconstructed records for more than 300 million individuals and correctly matched personal characteristics at an overall rate of 91.8 percent.\footnote{Population Reference Bureau and U.S. Census Bureau, \textit{Why the Census Bureau Chose Differential Privacy}, 3.} Methods that seemed adequate a decade ago do not hold up against the data resources and computing power available now. A guarantee that is fixed and provable is a more durable foundation than a checklist that erodes.
+
+\section{Conclusion}
+
+Artificial intelligence in medical imaging is only as good as the data it learns from, and the data it learns from is systematically incomplete. The demographic detail needed to build models that generalize, and to audit them for bias, is the same detail that current de-identification methods strip away. Institutions are left to choose between sharing too little and paying for a slow, impermanent expert review. The safest choice is usually to withhold the data. The result is a generation of models that underperform on external populations and exacerbate health inequalities for underrepresented patient populations.
+
+Differential privacy offers a way out. It protects patients with a guarantee that is mathematical, durable, and auditable, and it has already been proven at the scale of the national census and in commercial systems used by hundreds of millions of people. Applied to the demographic and clinical data that travels with medical images, it would let institutions share the information that bias auditing and representativeness checks require, without reopening the risk of re-identification.
+
+The obstacle is no longer technical. Differential privacy works, and it has been proven at scale. What it lacks is official recognition. The HHS Office for Civil Rights should recognize differential privacy as an accepted method under current de-identification pathways, which removes the barrier to sharing. The FDA should treat differentially private data as a credible way to meet its existing requirements for representative and bias-audited data, which creates the incentive to use it. Together, these steps would turn a capable but underused tool into standard practice, and would help ensure that the benefits of medical AI reach every patient it is meant to serve.
+
+\end{document}
