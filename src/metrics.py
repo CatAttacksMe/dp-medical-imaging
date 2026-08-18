@@ -13,7 +13,6 @@ import os
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import roc_auc_score
 
 import data_loading as dl
 import train as tr
@@ -22,12 +21,13 @@ import train as tr
 def patient_level_auc(df, score_col="predicted_score", label_col="true_label"):
     """Patient-level AUC from a predictions dataframe: ground truth
     aggregated by max, score aggregated by mean, across a patient's images
-    (see CLAUDE.md, Multi-image aggregation).
+    (see CLAUDE.md, Multi-image aggregation). Delegates to train.py's
+    _patient_level_auc rather than reimplementing the aggregation, so the
+    rule that early stopping optimizes against (train.py) and the rule the
+    reported oracle/robustness gaps are computed with (here) can't
+    silently diverge.
     """
-    agg = df.groupby("patient_id").agg(
-        label=(label_col, "max"), score=(score_col, "mean")
-    )
-    return roc_auc_score(agg["label"], agg["score"])
+    return tr._patient_level_auc(df["patient_id"], df[label_col], df[score_col])
 
 
 def subgroup_auc_gap(df, sex_col="true_sex"):
@@ -74,7 +74,13 @@ def cross_split_gap_spread(canonical_gap, alternate_split_gaps):
     return _gap_spread(canonical_gap, alternate_split_gaps)
 
 
-def _load_predictions(path):
+def _load_predictions(path, run_hint):
+    """Loads a predictions CSV, or raises with a pointer to the training
+    command that produces it — a bare FileNotFoundError here wouldn't say
+    which of train.py's several output paths is missing or why.
+    """
+    if not os.path.exists(path):
+        raise RuntimeError(f"{path} not found — run `{run_hint}` first")
     return pd.read_csv(path, dtype={"patient_id": str, "image_id": str})
 
 
@@ -87,13 +93,17 @@ def main():
     args = parser.parse_args()
 
     canonical_path = tr._output_path(tr.SPLIT_SENSITIVITY_ARM, dl.SEED)
-    canonical_gap = subgroup_auc_gap(_load_predictions(canonical_path))
+    canonical_gap = subgroup_auc_gap(
+        _load_predictions(canonical_path, "python train.py --arm 90_10")
+    )
     print(f"canonical (seed=42, canonical split) gap: {canonical_gap:.4f}")
 
     if args.note in ("seed", "both"):
         replicate_seeds = [s for s in tr.REPLICATION_SEEDS["90_10"] if s != dl.SEED]
         replicate_gaps = [
-            subgroup_auc_gap(_load_predictions(tr._output_path("90_10", seed)))
+            subgroup_auc_gap(
+                _load_predictions(tr._output_path("90_10", seed), "python train.py --arm 90_10")
+            )
             for seed in replicate_seeds
         ]
         result = cross_seed_gap_spread(canonical_gap, replicate_gaps)
@@ -106,7 +116,8 @@ def main():
                     os.path.join(
                         tr.SPLIT_SENSITIVITY_DIR,
                         f"predictions_{tr.SPLIT_SENSITIVITY_ARM}_split{seed}.csv",
-                    )
+                    ),
+                    "python train.py --split-sensitivity",
                 )
             )
             for seed in dl.SPLIT_SENSITIVITY_SEEDS

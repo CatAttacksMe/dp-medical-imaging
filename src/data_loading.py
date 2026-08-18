@@ -71,8 +71,13 @@ def _generate_split_df(patient_ids, seed):
     """Patient-level 70/15/15 split assignment for one seed. Shared by the
     canonical split and the split-sensitivity alternate splits — the two
     differ only in which seed and output path they use.
+
+    Sorts patient_ids before permuting so the split is a function of the
+    seed and the patient-ID set alone, not of metadata's row order (which
+    otherwise reflects the source CSV's arbitrary order and isn't a
+    reproducibility guarantee across re-downloads/mirrors).
     """
-    shuffled = np.random.RandomState(seed).permutation(patient_ids)
+    shuffled = np.random.RandomState(seed).permutation(np.sort(patient_ids))
 
     n = len(shuffled)
     n_train = int(round(n * SPLIT_FRACTIONS["train"]))

@@ -59,8 +59,11 @@ REPLICATION_DIR = os.path.join(RESULTS_DIR, "seed_replication")
 # Only the 90/10 arm, canonical training seed=42, against 3 alternate
 # patient splits (dl.SPLIT_SENSITIVITY_SEEDS) — checks split sensitivity,
 # not training stochasticity. See CLAUDE.md, Study A Split Sensitivity.
+# Dir reused from data_loading.py (not redefined) so the split files
+# get_alternate_patient_split writes and the prediction files
+# train_split_sensitivity writes can never drift apart.
 SPLIT_SENSITIVITY_ARM = "90_10"
-SPLIT_SENSITIVITY_DIR = os.path.join(RESULTS_DIR, "split_sensitivity")
+SPLIT_SENSITIVITY_DIR = dl.SPLIT_SENSITIVITY_DIR
 LOG_DIR = os.path.join(RESULTS_DIR, "logs")
 # .pth is gitignored by extension regardless of directory (see CLAUDE.md,
 # Conventions: checkpoints are never committed).
@@ -154,19 +157,22 @@ def _output_path(arm, run_seed):
 
 
 def train_one_arm(
-    arm, metadata, split_df, device, run_seed=SEED, max_epochs=MAX_EPOCHS, force=False,
-    output_path=None, run_name=None, undersample_seed=SEED,
+    arm, metadata, split_df, device, output_path, run_seed=SEED, max_epochs=MAX_EPOCHS,
+    force=False, run_name=None,
 ):
-    """Trains one imbalance arm on the given split_df.
+    """Trains one imbalance arm on the given split_df, writing to output_path.
 
-    output_path/run_name let split-sensitivity callers point this at
-    results/study_a/split_sensitivity/ with a filename tag that won't
-    collide with the canonical or seed-replication runs, even though all
-    three alternate-split runs share run_seed=SEED (only the split_df
-    differs). Defaults reproduce the original seed-replication behavior.
+    output_path is mandatory (not derived from run_seed internally) so a
+    caller training against a non-canonical split_df — e.g. the
+    split-sensitivity alternate splits — can never silently resolve to the
+    frozen results/study_a/predictions_{arm}.csv that is Study B's only
+    input contract; callers that do want the standard canonical/
+    seed-replication path get it via _output_path(arm, run_seed) at their
+    call site. run_name only affects checkpoint/log filenames and log
+    messages, defaulting to seed{run_seed}; split-sensitivity callers pass
+    a split-keyed run_name so their checkpoints/logs (which all share
+    run_seed=SEED) don't collide with each other or with the canonical run.
     """
-    if output_path is None:
-        output_path = _output_path(arm, run_seed)
     if run_name is None:
         run_name = f"seed{run_seed}"
 
@@ -178,13 +184,12 @@ def train_one_arm(
     # shuffling for this run — see CLAUDE.md, Seeding / Seed Replication.
     set_seed(run_seed)
 
-    # Undersampling seed defaults to the canonical seed regardless of
-    # run_seed — replicate runs must train on the *same* patients, varying
-    # only weight init/batch order, or they'd conflate composition noise
-    # with training noise. Split-sensitivity callers still pass the
-    # canonical undersample_seed, but a different split_df (see
-    # CLAUDE.md, Study A Split Sensitivity).
-    train_df = dl.build_training_set(metadata, split_df, arm, seed=undersample_seed)
+    # Undersampling always uses the canonical seed, regardless of run_seed
+    # — replicate runs must train on the *same* patients, varying only
+    # weight init/batch order, and split-sensitivity runs vary split_df
+    # itself, not the undersampling draw within it — see CLAUDE.md, Seed
+    # Replication / Split Sensitivity.
+    train_df = dl.build_training_set(metadata, split_df, arm, seed=SEED)
     val_df = dl.get_fixed_eval_set(metadata, split_df, "val")
     test_df = dl.get_fixed_eval_set(metadata, split_df, "test")
 
@@ -315,7 +320,7 @@ def main():
     for arm in arms:
         for run_seed in REPLICATION_SEEDS.get(arm, [SEED]):
             train_one_arm(
-                arm, metadata, split_df, device,
+                arm, metadata, split_df, device, _output_path(arm, run_seed),
                 run_seed=run_seed, max_epochs=args.max_epochs, force=args.force,
             )
 
