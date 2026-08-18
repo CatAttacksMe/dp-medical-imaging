@@ -1,5 +1,42 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-18 (train.py)
+- Wrote `src/train.py`: full end-to-end fine-tuning of ImageNet-pretrained
+  DenseNet-121 (single-logit head) across the 90/10, 70/30, 50/50 arms.
+  AdamW, LR 3e-5 (within CLAUDE.md's 1e-5-1e-4 range, fixed across arms),
+  max 20 epochs, early stopping on patient-level validation AUC (patience
+  5, gradient clipping at norm 1.0), identical across all three arms.
+  Writes `results/study_a/predictions_{arm}.csv` per the frozen schema.
+  Checkpoints saved to `results/study_a/checkpoints/*.pth` (gitignored).
+- Post-review hardening after a reviewer-style pass on the initial draft:
+  - GPU training now runs with `torch.use_deterministic_algorithms(True)`
+    (+ `cudnn.deterministic`) so seed 42 is an actual bit-reproducibility
+    anchor — the initial draft was not reproducible on GPU despite
+    CLAUDE.md's claim that seeding alone was sufficient.
+  - 90/10 (the only oracle-gated arm) is now replicated across 5 seeds
+    (42 canonical + 43-46) to check its gap isn't a one-run artifact of
+    training stochasticity; 70/30 and 50/50 stay single-run since they
+    aren't independently oracle-gated. See CLAUDE.md, Study A Seed
+    Replication. Canonical seed=42 output is still the frozen
+    `predictions_90_10.csv`; replicate seeds write to
+    `results/study_a/seed_replication/`, outside Study B's read contract.
+  - Runs whose output CSV already exists are skipped (`--force` to redo),
+    so an interrupted multi-run sweep only loses the run in flight, not
+    everything before it.
+  - Added a NaN-val-AUC guard (raises immediately with a clear message
+    instead of a confusing downstream FileNotFoundError from a
+    never-written checkpoint) and per-epoch loss/val-AUC logging to
+    `results/study_a/logs/train_log_{arm}_seed{run_seed}.csv`.
+- Benchmarked real throughput on the RTX 4070 (90/10 arm, real data,
+  determinism enabled): ~130 img/s train, ~167 img/s val → ~7.4 min/epoch,
+  ~1-2.5h per run depending on early stopping. Full plan (90/10 x5 seeds +
+  70/30 + 50/50 single runs, 7 runs total): ~7-17.5h estimated, not yet
+  run.
+- Smoke-tested the full pipeline (train step, checkpointing, patient-level
+  AUC, CSV schema/dtypes, skip-if-exists, per-epoch log) on a tiny
+  hand-balanced subset written to scratch, not the real results/ path —
+  the real multi-hour training run has not happened yet.
+
 ## [Study A] 2026-08-18
 - Wrote `src/data_loading.py`: metadata loading, frozen 70/15/15
   patient-level split (seed 42), patient-level undersampling for the

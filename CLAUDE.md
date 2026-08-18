@@ -160,14 +160,22 @@ truth everything else is measured against.
   pretrained conv1 weights to be valid.
 - **Seeding:** seed 42 covers the patient split AND weight init AND
   data-loader shuffling for the training run — the only reproducibility
-  anchor, since checkpoints are never committed.
-- **Class weighting:** pneumothorax prevalence handling decided once,
-  applied identically across all three arms.
+  anchor, since checkpoints are never committed. GPU training explicitly
+  enables `torch.use_deterministic_algorithms(True)` +
+  `cudnn.deterministic = True` (`cudnn.benchmark = False`), so this is an
+  actual bit-reproducibility guarantee, not just a nominal one — plain
+  seeding alone is not sufficient on GPU (cuDNN's default conv algorithms
+  are non-deterministic regardless of seed).
+- **Class weighting:** pneumothorax prevalence handling decided once
+  (inverse-frequency `pos_weight` in `BCEWithLogitsLoss`), applied
+  identically across all three arms.
 - **Test oracle scope:** only the 90/10 arm is checked against Larrazabal's
-  reported gap (same direction, within 2 AUC points). 70/30 and 50/50 are
-  internal comparison points, not independently oracle-gated. A
-  patient-level bootstrap CI (~1,000 resamples) on the 90/10 gap is logged
-  in CHANGELOG.md as a robustness note — non-gating.
+  reported gap (same direction, within 2 AUC points), using its canonical
+  seed=42 run. 70/30 and 50/50 are internal comparison points, not
+  independently oracle-gated. A patient-level bootstrap CI (~1,000
+  resamples) on the 90/10 gap, and the cross-seed gap spread (see Seed
+  Replication below), are logged in CHANGELOG.md as robustness notes —
+  both non-gating; the pass/fail criterion stays the single seed=42 run.
 - **`true_age` column:** carried for completeness/future reference; not a
   manipulated variable or part of Study A's oracle.
 
@@ -189,6 +197,40 @@ truth everything else is measured against.
   `src/train.py` — do not use `weights="DEFAULT"` or `weights=True`, since
   torchvision's default IMAGENET1K weights enum has changed across
   versions and an unpinned default is not reproducible.
+
+### Study A — Seed Replication (finalized)
+
+- **Why:** the test oracle checks a single stochastic training run's
+  subgroup AUC gap against a published number. A single run can't
+  distinguish "the imbalance causes this gap" from "this particular
+  weight-init/batch-order draw happened to produce this gap" — only the
+  arm actually checked against an external claim needs this defended.
+- **Scope:** only the 90/10 arm is replicated, across 5 seeds
+  (42, 43, 44, 45, 46). 70/30 and 50/50 stay single-run (seed 42) — they
+  aren't independently oracle-gated (see Test oracle scope above), so
+  replicating them defends a claim nobody is making.
+- **What varies vs. what stays fixed across replicate seeds:** only
+  weight init (the new classifier head) and data-loader shuffling order
+  vary by seed. The patient split and the 90/10 arm's undersampled
+  training patients are always drawn with the canonical seed 42,
+  identical across all 5 runs — otherwise composition noise and training
+  noise would be conflated, defeating the point of the replication.
+- **Output contract:** the canonical seed=42 run still writes the frozen
+  `results/study_a/predictions_90_10.csv` — Study B's input contract is
+  unchanged. Seeds 43-46 write to
+  `results/study_a/seed_replication/predictions_90_10_seed{N}.csv`,
+  which is explicitly **not** part of the Study A → Study B handoff (see
+  Frozen Handoff above) — Study B reads only `predictions_90_10.csv`.
+- **Reporting:** the cross-seed gap spread (mean, range, direction
+  agreement) is a non-gating robustness note in CHANGELOG.md, computed
+  from all 5 runs — the pass/fail oracle criterion itself stays the
+  single seed=42 run, to keep it simple and avoid re-litigating what
+  "passing" means. `src/metrics.py` computes this, not `src/train.py`,
+  which only produces predictions CSVs.
+- **Auxiliary outputs** (`results/study_a/checkpoints/`,
+  `results/study_a/logs/`, `results/study_a/seed_replication/`) are not
+  frozen deliverables — only the three `predictions_*.csv` and
+  `patient_split.csv` are (see Deliverable to merge above).
 
 ---
 
