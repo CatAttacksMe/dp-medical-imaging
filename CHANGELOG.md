@@ -1,5 +1,15 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-18
+- Wrote `src/data_loading.py`: metadata loading, frozen 70/15/15
+  patient-level split (seed 42), patient-level undersampling for the
+  90/10, 70/30, 50/50 sex-imbalance sweep (fixed N_total=11664 across all
+  three arms, female fixed as minority sex), fixed representative val/test
+  sets, and the ImageNet-normalized image dataset for the pretrained
+  backbone.
+- Generated `results/study_a/patient_split.csv` (21564/4621/4620
+  train/val/test patients) — frozen from this point forward.
+
 ## [Shared] 2026-08-18
 - Study A backbone pinned to ImageNet-pretrained DenseNet-121
   (`torchvision.models.densenet121`, `DenseNet121_Weights.IMAGENET1K_V1`),
