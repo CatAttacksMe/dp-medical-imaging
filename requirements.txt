@@ -120,6 +120,8 @@ threadpoolctl==3.6.0
 tifffile==2026.7.31
 tinycss2==1.5.1
 torch==2.6.0+cu124
+# Study A backbone: torchvision.models.densenet121(weights=DenseNet121_Weights.IMAGENET1K_V1)
+# — pin this enum explicitly in src/train.py, not weights="DEFAULT"/True (see CLAUDE.md, Study A)
 torchvision==0.21.0+cu124
 torchxrayvision==1.5.2
 tornado==6.5.7

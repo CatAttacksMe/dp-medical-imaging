@@ -160,6 +160,22 @@ truth everything else is measured against.
 - **`true_age` column:** carried for completeness/future reference; not a
   manipulated variable or part of Study A's oracle.
 
+### Study A — Backbone Initialization (finalized)
+
+- **Backbone init:** ImageNet-pretrained DenseNet-121 via
+  `torchvision.models.densenet121(weights=DenseNet121_Weights.IMAGENET1K_V1)`.
+  NOT a torchxrayvision chest-X-ray checkpoint — `-nih`/`-all` were
+  pretrained on the same NIH corpus this study splits into train/test
+  (leakage risk), and even non-NIH checkpoints (`-chex`, `-mimic_ch`, etc.)
+  deviate from Larrazabal et al.'s own ImageNet-init methodology, which is
+  what the test oracle checks against. torchxrayvision is used for data
+  loading/preprocessing only (e.g. `xrv.datasets.NIH_Dataset`,
+  `xrv.datasets.normalize`), not model weights.
+- **Weights enum:** pin `DenseNet121_Weights.IMAGENET1K_V1` explicitly in
+  `src/train.py` — do not use `weights="DEFAULT"` or `weights=True`, since
+  torchvision's default IMAGENET1K weights enum has changed across
+  versions and an unpinned default is not reproducible.
+
 ---
 
 ## Study B — Core Contribution: DP vs. True Demographics
