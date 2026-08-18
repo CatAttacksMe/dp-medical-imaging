@@ -9,9 +9,9 @@ import os
 
 import numpy as np
 import pandas as pd
+import skimage.transform
 import torch
 import torchvision.transforms as T
-import torchxrayvision as xrv
 from PIL import Image
 from torch.utils.data import Dataset
 
@@ -139,28 +139,35 @@ def compute_pos_weight(df, label_col="true_label"):
 
 class NIHPneumothoraxDataset(Dataset):
     """Pneumothorax-labeled NIH ChestX-ray14 images, preprocessed for the
-    ImageNet-pretrained backbone: resized via torchxrayvision's XRayResizer
-    (224x224, matching xrv's res224 convention), then normalized with
-    ImageNet mean/std as 3-channel input — not torchxrayvision's own
-    single-channel normalize() range, which targets xrv-pretrained models
-    rather than the ImageNet-pretrained backbone Study A uses.
+    ImageNet-pretrained backbone: resized to 224x224 with
+    skimage.transform.resize, then normalized with ImageNet mean/std as
+    3-channel input. Deliberately does not depend on torchxrayvision —
+    not for weights, and not for preprocessing either — to keep Study A
+    structurally free of any contact with the chest-X-ray-pretrained
+    ecosystem (see CLAUDE.md, Study A Backbone Initialization).
     """
 
     def __init__(self, df, image_dir=DEFAULT_IMAGE_DIR, image_size=IMAGE_SIZE):
         self.df = df.reset_index(drop=True)
         self.image_dir = image_dir
-        self._resize = xrv.datasets.XRayResizer(image_size)
+        self.image_size = image_size
         self._normalize = T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
-
-    def __len__(self):
-        return len(self.df)
 
     def _load_image(self, image_id):
         img = Image.open(os.path.join(self.image_dir, image_id)).convert("L")
         arr = np.array(img, dtype=np.float32)[None, :, :]  # (1, H, W), 0-255
-        arr = self._resize(arr) / 255.0  # (1, size, size), 0-1
+        arr = skimage.transform.resize(
+            arr,
+            (1, self.image_size, self.image_size),
+            mode="constant",
+            preserve_range=True,
+        ).astype(np.float32)
+        arr = arr / 255.0  # (1, size, size), 0-1
         tensor = torch.from_numpy(arr).repeat(3, 1, 1)  # (3, size, size)
         return self._normalize(tensor)
+
+    def __len__(self):
+        return len(self.df)
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]

@@ -9,6 +9,14 @@
   backbone.
 - Generated `results/study_a/patient_split.csv` (21564/4621/4620
   train/val/test patients) — frozen from this point forward.
+- Dropped the `torchxrayvision` import from `src/data_loading.py`
+  entirely — resizing to 224x224 is now done directly with
+  `skimage.transform.resize` (same call `XRayResizer` made internally, so
+  preprocessing output is unchanged) instead of via the package. Study A's
+  code now has zero dependency on `torchxrayvision`, for weights or
+  preprocessing, avoiding any structural contact with the chest-X-ray-
+  pretrained ecosystem. Package remains installed/pinned in
+  `requirements.txt` but is unused by any study's code.
 
 ## [Shared] 2026-08-18
 - Study A backbone pinned to ImageNet-pretrained DenseNet-121

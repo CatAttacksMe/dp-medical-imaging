@@ -150,12 +150,14 @@ truth everything else is measured against.
   only training composition changes.
 - **Multi-image aggregation:** patient-level AUC computed by averaging
   `predicted_score` across a patient's images before ranking.
-- **Preprocessing:** resize to 224x224 (matches xrv's res224 convention),
-  replicate grayscale to 3 channels, normalize with ImageNet mean/std —
-  **not** torchxrayvision's own single-channel normalization range. That
-  original note assumed an xrv-pretrained backbone; superseded by the
-  Backbone Initialization decision below, which requires ImageNet-style
-  input statistics for the pretrained conv1 weights to be valid.
+- **Preprocessing:** resize to 224x224 (the resolution convention
+  torchxrayvision's models use, though the package itself is not a
+  dependency — see Backbone Initialization below), replicate grayscale to
+  3 channels, normalize with ImageNet mean/std. Not torchxrayvision's own
+  single-channel normalization range — that original note assumed an
+  xrv-pretrained backbone; superseded by the Backbone Initialization
+  decision below, which requires ImageNet-style input statistics for the
+  pretrained conv1 weights to be valid.
 - **Seeding:** seed 42 covers the patient split AND weight init AND
   data-loader shuffling for the training run — the only reproducibility
   anchor, since checkpoints are never committed.
@@ -177,9 +179,12 @@ truth everything else is measured against.
   pretrained on the same NIH corpus this study splits into train/test
   (leakage risk), and even non-NIH checkpoints (`-chex`, `-mimic_ch`, etc.)
   deviate from Larrazabal et al.'s own ImageNet-init methodology, which is
-  what the test oracle checks against. torchxrayvision is used for data
-  loading/preprocessing only (e.g. `xrv.datasets.NIH_Dataset`,
-  `xrv.datasets.normalize`), not model weights.
+  what the test oracle checks against. The `torchxrayvision` package is
+  **not a dependency of Study A at all** — not for weights, and not for
+  data loading/preprocessing either, to keep the pipeline structurally
+  free of any contact with the chest-X-ray-pretrained ecosystem.
+  Resizing to 224x224 is done directly with `skimage.transform.resize`;
+  `src/data_loading.py` does not import `torchxrayvision`.
 - **Weights enum:** pin `DenseNet121_Weights.IMAGENET1K_V1` explicitly in
   `src/train.py` — do not use `weights="DEFAULT"` or `weights=True`, since
   torchvision's default IMAGENET1K weights enum has changed across
@@ -251,6 +256,7 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
 - Never commit files under `data/` or model checkpoint files, on any branch.
 - If it's unclear which study an instruction belongs to, or which branch
   should be active, stop and ask rather than guessing.
+- Never add Co-Authored-By or Generated-with trailers to commits
 
 ---
 
