@@ -1,5 +1,12 @@
 # Changelog / Lab Notes
 
+## [Shared] 2026-08-18
+- Study A backbone pinned to ImageNet-pretrained DenseNet-121
+  (`torchvision.models.densenet121`, `DenseNet121_Weights.IMAGENET1K_V1`),
+  not a torchxrayvision chest-X-ray checkpoint — avoids NIH-corpus
+  pretraining leakage into the test split and matches Larrazabal et al.'s
+  own init methodology, which the test oracle checks against.
+
 ## [Setup]
 - Environment created: venv at ~/envs/dp-cxr, PyTorch <version>, CUDA verified on RTX 4070.
 # Project Context — Setup Log
