@@ -138,15 +138,24 @@ truth everything else is measured against.
   the 50/50 arm's demand: `N_total = min(available_majority, 2 ×
   available_minority)`. Majority is undersampled within that fixed budget
   to hit each ratio. Minority sex identity is fixed and stated explicitly,
-  not relabeled per arm.
-- **Fine-tuning:** full end-to-end fine-tuning of the torchxrayvision
-  backbone (not frozen). LR 1e-5–1e-4, early stopping on validation AUC,
-  shared max-epoch cap across all three arms. Hyperparameters and epoch
-  budget identical across arms — only training composition changes.
+  not relabeled per arm. **Minority sex = female** — the 90/10, 70/30, and
+  50/50 arms all skew male-majority, female-minority (matches Larrazabal et
+  al.'s most-cited scenario, needed for the test oracle's direction check).
+  Undersampling operates at the *patient* level (whole patients dropped,
+  not individual images), consistent with the patient-level split.
+- **Fine-tuning:** full end-to-end fine-tuning of the backbone (not
+  frozen) — see Backbone Initialization below for which backbone. LR
+  1e-5–1e-4, early stopping on validation AUC, shared max-epoch cap across
+  all three arms. Hyperparameters and epoch budget identical across arms —
+  only training composition changes.
 - **Multi-image aggregation:** patient-level AUC computed by averaging
   `predicted_score` across a patient's images before ranking.
-- **Preprocessing:** must match torchxrayvision's expected input
-  normalization/resizing exactly.
+- **Preprocessing:** resize to 224x224 (matches xrv's res224 convention),
+  replicate grayscale to 3 channels, normalize with ImageNet mean/std —
+  **not** torchxrayvision's own single-channel normalization range. That
+  original note assumed an xrv-pretrained backbone; superseded by the
+  Backbone Initialization decision below, which requires ImageNet-style
+  input statistics for the pretrained conv1 weights to be valid.
 - **Seeding:** seed 42 covers the patient split AND weight init AND
   data-loader shuffling for the training run — the only reproducibility
   anchor, since checkpoints are never committed.
