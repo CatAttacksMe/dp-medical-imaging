@@ -149,7 +149,10 @@ truth everything else is measured against.
   all three arms. Hyperparameters and epoch budget identical across arms —
   only training composition changes.
 - **Multi-image aggregation:** patient-level AUC computed by averaging
-  `predicted_score` across a patient's images before ranking.
+  `predicted_score` across a patient's images before ranking. Patient-level
+  ground truth is aggregated by `max` (a patient counts as positive if any
+  of their images does) — standard, low-risk, noted here since it wasn't
+  previously written down explicitly.
 - **Preprocessing:** resize to 224x224 (the resolution convention
   torchxrayvision's models use, though the package itself is not a
   dependency — see Backbone Initialization below), replicate grayscale to

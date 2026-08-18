@@ -1,5 +1,36 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-18 (train.py throughput)
+- Verified the two remaining items from the reviewer pass that hadn't
+  actually been implemented yet: patient-level ground-truth aggregation
+  via `max` was already correct in code but undocumented — added a note
+  to CLAUDE.md. Mixed precision (AMP) had been raised but never
+  implemented — investigated below instead of adding it blind.
+- Benchmarked the CPU/GPU split on the RTX 4070 + Ryzen 9800X3D (WSL2):
+  pure GPU compute (no data loading) hits 218.5 img/s FP32/TF32 vs.
+  311.0 img/s AMP bf16 — AMP clearly helps GPU-bound compute. But the
+  full pipeline at `num_workers=4` only reached ~130-134 img/s regardless
+  of AMP, meaning it was CPU-bound (PNG decode + resize), not GPU-bound —
+  AMP would have added complexity for ~0 real speedup at that setting.
+- Found WSL2 exposes only 8 logical CPUs on this machine (`lscpu`:
+  `Thread(s) per core: 1`, no `.wslconfig` present) — the 9800X3D's other
+  8 SMT threads aren't visible to Linux. Getting them would need
+  `processors=16` in `.wslconfig` + `wsl --shutdown`, which kills all
+  running WSL sessions — not done; flagging as available but disruptive
+  if GPU-hours become a harder constraint later.
+- Within the current 8-CPU cap, raising `num_workers` 4→7 (not 8 — no
+  core left for the main process, which measured slightly worse) closed
+  most of the CPU/GPU gap: ~130-134 img/s → ~195-220 img/s (45-65% faster,
+  with some run-to-run variance). Adopted in `train.py`. Also added
+  `persistent_workers=True` so the 7 workers aren't respawned every
+  epoch, which `num_workers=7` alone wouldn't otherwise benefit from
+  given train/val loaders are re-iterated every epoch.
+- Re-tested AMP on top of `num_workers=7`: measured 195.3 img/s vs.
+  195.7-220.7 img/s without AMP across two non-AMP reruns — the
+  difference is within run-to-run noise, not a real effect, once the CPU
+  bottleneck is fixed. **Not adopted** — no clear benefit to justify the
+  added `autocast` complexity at this bottleneck balance.
+
 ## [Study A] 2026-08-18 (train.py)
 - Wrote `src/train.py`: full end-to-end fine-tuning of ImageNet-pretrained
   DenseNet-121 (single-logit head) across the 90/10, 70/30, 50/50 arms.

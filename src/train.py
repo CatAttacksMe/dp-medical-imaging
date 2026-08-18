@@ -47,7 +47,10 @@ LEARNING_RATE = 3e-5
 MAX_EPOCHS = 20
 EARLY_STOP_PATIENCE = 5
 BATCH_SIZE = 32
-NUM_WORKERS = 4
+# 7, not 8: this WSL2 environment exposes 8 logical CPUs (see CHANGELOG),
+# and leaving one free for the main process measured faster than using
+# all 8. Benchmarked ~45-65% faster than num_workers=4 on this box.
+NUM_WORKERS = 7
 GRAD_CLIP_NORM = 1.0
 
 RESULTS_DIR = os.path.join(dl.REPO_ROOT, "results", "study_a")
@@ -94,6 +97,10 @@ def make_loader(df, batch_size=BATCH_SIZE, shuffle=False, generator=None):
         num_workers=NUM_WORKERS,
         generator=generator if shuffle else None,
         pin_memory=torch.cuda.is_available(),
+        # train_loader/val_loader are re-iterated every epoch in
+        # train_one_arm; without this, PyTorch respawns all NUM_WORKERS
+        # processes each epoch instead of reusing them.
+        persistent_workers=NUM_WORKERS > 0,
     )
 
 
