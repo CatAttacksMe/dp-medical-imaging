@@ -128,6 +128,37 @@ truth everything else is measured against.
   `main`, and no Study B/C result should be treated as meaningful.
 - **Deliverable to merge:** the three predictions CSVs + `patient_split.csv`,
   per the schema above. Checkpoints are never committed.
+  ### Study A — Design Decisions (finalized)
+
+- **Test/val composition:** fixed and sex-representative (unmanipulated) across
+  all three ratio arms, drawn once from the frozen 70/15/15 patient split.
+  Only the training set's sex composition varies per arm.
+- **Imbalancing method:** undersampling only (no duplication, no ad hoc
+  discarding). Total training N is fixed across all three arms, capped by
+  the 50/50 arm's demand: `N_total = min(available_majority, 2 ×
+  available_minority)`. Majority is undersampled within that fixed budget
+  to hit each ratio. Minority sex identity is fixed and stated explicitly,
+  not relabeled per arm.
+- **Fine-tuning:** full end-to-end fine-tuning of the torchxrayvision
+  backbone (not frozen). LR 1e-5–1e-4, early stopping on validation AUC,
+  shared max-epoch cap across all three arms. Hyperparameters and epoch
+  budget identical across arms — only training composition changes.
+- **Multi-image aggregation:** patient-level AUC computed by averaging
+  `predicted_score` across a patient's images before ranking.
+- **Preprocessing:** must match torchxrayvision's expected input
+  normalization/resizing exactly.
+- **Seeding:** seed 42 covers the patient split AND weight init AND
+  data-loader shuffling for the training run — the only reproducibility
+  anchor, since checkpoints are never committed.
+- **Class weighting:** pneumothorax prevalence handling decided once,
+  applied identically across all three arms.
+- **Test oracle scope:** only the 90/10 arm is checked against Larrazabal's
+  reported gap (same direction, within 2 AUC points). 70/30 and 50/50 are
+  internal comparison points, not independently oracle-gated. A
+  patient-level bootstrap CI (~1,000 resamples) on the 90/10 gap is logged
+  in CHANGELOG.md as a robustness note — non-gating.
+- **`true_age` column:** carried for completeness/future reference; not a
+  manipulated variable or part of Study A's oracle.
 
 ---
 
