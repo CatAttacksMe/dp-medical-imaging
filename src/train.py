@@ -3,7 +3,8 @@ DenseNet-121 on NIH ChestX-ray14 pneumothorax labels, across the 90/10,
 70/30, 50/50 sex-imbalance sweep. Writes one predictions CSV per run.
 
 See CLAUDE.md, "Study A — Baseline" (Design Decisions / Backbone
-Initialization / Seed Replication) for the rules this module implements.
+Initialization / Seed Replication / Split Sensitivity) for the rules this
+module implements.
 Hyperparameters below (LEARNING_RATE, MAX_EPOCHS, EARLY_STOP_PATIENCE,
 BATCH_SIZE, GRAD_CLIP_NORM) are engineering defaults within CLAUDE.md's
 constraints (LR in [1e-5, 1e-4], identical across arms) rather than
@@ -55,6 +56,11 @@ GRAD_CLIP_NORM = 1.0
 
 RESULTS_DIR = os.path.join(dl.REPO_ROOT, "results", "study_a")
 REPLICATION_DIR = os.path.join(RESULTS_DIR, "seed_replication")
+# Only the 90/10 arm, canonical training seed=42, against 3 alternate
+# patient splits (dl.SPLIT_SENSITIVITY_SEEDS) — checks split sensitivity,
+# not training stochasticity. See CLAUDE.md, Study A Split Sensitivity.
+SPLIT_SENSITIVITY_ARM = "90_10"
+SPLIT_SENSITIVITY_DIR = os.path.join(RESULTS_DIR, "split_sensitivity")
 LOG_DIR = os.path.join(RESULTS_DIR, "logs")
 # .pth is gitignored by extension regardless of directory (see CLAUDE.md,
 # Conventions: checkpoints are never committed).
@@ -147,21 +153,38 @@ def _output_path(arm, run_seed):
     return os.path.join(REPLICATION_DIR, f"predictions_{arm}_seed{run_seed}.csv")
 
 
-def train_one_arm(arm, metadata, split_df, device, run_seed=SEED, max_epochs=MAX_EPOCHS, force=False):
-    output_path = _output_path(arm, run_seed)
+def train_one_arm(
+    arm, metadata, split_df, device, run_seed=SEED, max_epochs=MAX_EPOCHS, force=False,
+    output_path=None, run_name=None, undersample_seed=SEED,
+):
+    """Trains one imbalance arm on the given split_df.
+
+    output_path/run_name let split-sensitivity callers point this at
+    results/study_a/split_sensitivity/ with a filename tag that won't
+    collide with the canonical or seed-replication runs, even though all
+    three alternate-split runs share run_seed=SEED (only the split_df
+    differs). Defaults reproduce the original seed-replication behavior.
+    """
+    if output_path is None:
+        output_path = _output_path(arm, run_seed)
+    if run_name is None:
+        run_name = f"seed{run_seed}"
+
     if os.path.exists(output_path) and not force:
-        print(f"[{arm} seed={run_seed}] {output_path} already exists, skipping (--force to redo)")
+        print(f"[{arm} {run_name}] {output_path} already exists, skipping (--force to redo)")
         return pd.read_csv(output_path, dtype={"patient_id": str, "image_id": str})
 
     # Seed covers weight init (the new classifier head) and data-loader
     # shuffling for this run — see CLAUDE.md, Seeding / Seed Replication.
     set_seed(run_seed)
 
-    # Patient split and per-arm undersampling always use the canonical
-    # seed, regardless of run_seed — replicate runs must train on the
-    # *same* patients, varying only weight init/batch order, or they'd
-    # conflate composition noise with training noise.
-    train_df = dl.build_training_set(metadata, split_df, arm, seed=SEED)
+    # Undersampling seed defaults to the canonical seed regardless of
+    # run_seed — replicate runs must train on the *same* patients, varying
+    # only weight init/batch order, or they'd conflate composition noise
+    # with training noise. Split-sensitivity callers still pass the
+    # canonical undersample_seed, but a different split_df (see
+    # CLAUDE.md, Study A Split Sensitivity).
+    train_df = dl.build_training_set(metadata, split_df, arm, seed=undersample_seed)
     val_df = dl.get_fixed_eval_set(metadata, split_df, "val")
     test_df = dl.get_fixed_eval_set(metadata, split_df, "test")
 
@@ -178,8 +201,8 @@ def train_one_arm(arm, metadata, split_df, device, run_seed=SEED, max_epochs=MAX
 
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
-    checkpoint_path = os.path.join(CHECKPOINT_DIR, f"densenet121_{arm}_seed{run_seed}.pth")
-    log_path = os.path.join(LOG_DIR, f"train_log_{arm}_seed{run_seed}.csv")
+    checkpoint_path = os.path.join(CHECKPOINT_DIR, f"densenet121_{arm}_{run_name}.pth")
+    log_path = os.path.join(LOG_DIR, f"train_log_{arm}_{run_name}.csv")
 
     best_val_auc = -1.0
     epochs_without_improvement = 0
@@ -204,10 +227,10 @@ def train_one_arm(arm, metadata, split_df, device, run_seed=SEED, max_epochs=MAX
         val_auc, _ = evaluate(model, val_loader, device)
         if np.isnan(val_auc):
             raise RuntimeError(
-                f"[{arm} seed={run_seed}] val AUC is NaN at epoch {epoch} — training diverged"
+                f"[{arm} {run_name}] val AUC is NaN at epoch {epoch} — training diverged"
             )
         print(
-            f"[{arm} seed={run_seed}] epoch {epoch}: "
+            f"[{arm} {run_name}] epoch {epoch}: "
             f"train_loss={train_loss:.4f} val patient-AUC={val_auc:.4f}"
         )
         log_rows.append({"epoch": epoch, "train_loss": train_loss, "val_auc": val_auc})
@@ -218,14 +241,14 @@ def train_one_arm(arm, metadata, split_df, device, run_seed=SEED, max_epochs=MAX
         else:
             epochs_without_improvement += 1
             if epochs_without_improvement >= EARLY_STOP_PATIENCE:
-                print(f"[{arm} seed={run_seed}] early stopping at epoch {epoch}")
+                print(f"[{arm} {run_name}] early stopping at epoch {epoch}")
                 break
 
     pd.DataFrame(log_rows).to_csv(log_path, index=False)
 
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
     test_auc, predictions = evaluate(model, test_loader, device)
-    print(f"[{arm} seed={run_seed}] best val patient-AUC={best_val_auc:.4f}, test patient-AUC={test_auc:.4f}")
+    print(f"[{arm} {run_name}] best val patient-AUC={best_val_auc:.4f}, test patient-AUC={test_auc:.4f}")
 
     predictions = predictions.merge(
         metadata[["patient_id", "image_id", "true_sex", "true_age"]],
@@ -237,8 +260,29 @@ def train_one_arm(arm, metadata, split_df, device, run_seed=SEED, max_epochs=MAX
     ]
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     predictions.to_csv(output_path, index=False)
-    print(f"[{arm} seed={run_seed}] wrote {output_path} ({len(predictions)} rows)")
+    print(f"[{arm} {run_name}] wrote {output_path} ({len(predictions)} rows)")
     return predictions
+
+
+def train_split_sensitivity(metadata, device, max_epochs=MAX_EPOCHS, force=False):
+    """Trains the 90/10 arm once per alternate patient split (seeds 101-103),
+    each rebuilt via dl.get_alternate_patient_split and undersampled fresh
+    from that split — canonical training seed throughout, so only the split
+    varies, not training stochasticity. See CLAUDE.md, Study A Split
+    Sensitivity.
+    """
+    predictions_by_seed = {}
+    for split_seed in dl.SPLIT_SENSITIVITY_SEEDS:
+        alt_split_df = dl.get_alternate_patient_split(metadata, split_seed)
+        output_path = os.path.join(
+            SPLIT_SENSITIVITY_DIR, f"predictions_{SPLIT_SENSITIVITY_ARM}_split{split_seed}.csv"
+        )
+        predictions_by_seed[split_seed] = train_one_arm(
+            SPLIT_SENSITIVITY_ARM, metadata, alt_split_df, device,
+            run_seed=SEED, max_epochs=max_epochs, force=force,
+            output_path=output_path, run_name=f"split{split_seed}",
+        )
+    return predictions_by_seed
 
 
 def main():
@@ -248,6 +292,11 @@ def main():
     parser.add_argument(
         "--force", action="store_true", help="redo runs even if their output CSV already exists"
     )
+    parser.add_argument(
+        "--split-sensitivity", action="store_true",
+        help="train the 90/10 arm against the 3 alternate split-sensitivity splits "
+             "(seeds 101-103) instead of the normal --arm sweep",
+    )
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -255,6 +304,11 @@ def main():
     configure_determinism()
 
     metadata = dl.load_metadata()
+
+    if args.split_sensitivity:
+        train_split_sensitivity(metadata, device, max_epochs=args.max_epochs, force=args.force)
+        return
+
     split_df = dl.get_patient_split(metadata)
 
     arms = ARMS if args.arm == "all" else [args.arm]

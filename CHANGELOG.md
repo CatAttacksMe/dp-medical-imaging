@@ -1,5 +1,40 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-18 (split sensitivity)
+- Added a split-level counterpart to the existing cross-seed robustness
+  note: reproduces the 90/10 gap on 3 additional patient-level 70/15/15
+  splits (seeds 101, 102, 103 — distinct from the 42-46 training-seed
+  range) rather than 3 additional training runs on the same split, to
+  check the gap isn't an artifact of which patients happened to land in
+  test. Only the 90/10 arm, canonical training seed=42, is affected —
+  same scope rule as Seed Replication. See CLAUDE.md, Study A Split
+  Sensitivity.
+- `src/data_loading.py`: factored the split-generation logic out of
+  `get_patient_split` into `_generate_split_df`, shared with the new
+  `get_alternate_patient_split(metadata, seed)`, which writes to
+  `results/study_a/split_sensitivity/patient_split_seed{N}.csv` and never
+  touches the canonical `patient_split.csv`.
+- `src/train.py`: generalized `train_one_arm` to accept an explicit
+  `output_path`/`run_name`/`undersample_seed` (defaults reproduce prior
+  behavior exactly) so it can be reused for split-sensitivity runs without
+  colliding with canonical/seed-replication checkpoint and log filenames —
+  all split-sensitivity runs share `run_seed=SEED` (only `split_df`
+  differs), so filenames are keyed by split, not training seed. Added
+  `train_split_sensitivity()` and a `--split-sensitivity` CLI flag, writing
+  to `results/study_a/split_sensitivity/predictions_90_10_split{N}.csv`.
+- `src/metrics.py`: **new file** — didn't exist yet, so this also
+  implements the cross-training-seed gap spread that CLAUDE.md's Seed
+  Replication section already described as living here (documented but
+  never actually written until now), alongside the new cross-split gap
+  spread. Both are non-gating CHANGELOG robustness notes computed from
+  patient-level subgroup AUC gaps; neither changes the pass/fail oracle,
+  which stays the single canonical seed=42, canonical-split 90/10 run.
+- Not yet run: no Study A training has happened in this repo yet (no
+  `predictions_*.csv` exist), so neither the cross-seed nor the
+  cross-split spread has an actual numeric result to log yet — this entry
+  covers the implementation only. Numeric results to follow once the
+  90/10 sweep (canonical + seed replication + split sensitivity) is run.
+
 ## [Study A] 2026-08-18 (train.py throughput)
 - Verified the two remaining items from the reviewer pass that hadn't
   actually been implemented yet: patient-level ground-truth aggregation

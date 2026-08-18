@@ -44,6 +44,12 @@ DEFAULT_METADATA_CSV = os.path.join(
 DEFAULT_IMAGE_DIR = os.path.join(REPO_ROOT, "data", "raw")
 PATIENT_SPLIT_PATH = os.path.join(REPO_ROOT, "results", "study_a", "patient_split.csv")
 
+# Split-sensitivity seeds — distinct from the 42-46 range used for
+# weight-init/data-loader-shuffle seeding, so the two kinds of seed are
+# never confused. See CLAUDE.md, Study A Split Sensitivity.
+SPLIT_SENSITIVITY_SEEDS = [101, 102, 103]
+SPLIT_SENSITIVITY_DIR = os.path.join(REPO_ROOT, "results", "study_a", "split_sensitivity")
+
 
 def load_metadata(csv_path=DEFAULT_METADATA_CSV):
     """Loads the NIH metadata CSV into the columns Study A needs."""
@@ -61,6 +67,21 @@ def load_metadata(csv_path=DEFAULT_METADATA_CSV):
     )
 
 
+def _generate_split_df(patient_ids, seed):
+    """Patient-level 70/15/15 split assignment for one seed. Shared by the
+    canonical split and the split-sensitivity alternate splits — the two
+    differ only in which seed and output path they use.
+    """
+    shuffled = np.random.RandomState(seed).permutation(patient_ids)
+
+    n = len(shuffled)
+    n_train = int(round(n * SPLIT_FRACTIONS["train"]))
+    n_val = int(round(n * SPLIT_FRACTIONS["val"]))
+    splits = ["train"] * n_train + ["val"] * n_val + ["test"] * (n - n_train - n_val)
+
+    return pd.DataFrame({"patient_id": shuffled, "split": splits})
+
+
 def get_patient_split(metadata, split_path=PATIENT_SPLIT_PATH, seed=SEED):
     """Loads the frozen 70/15/15 patient-level split, generating it once on
     the first call. An existing split_path is loaded as-is and never
@@ -69,16 +90,25 @@ def get_patient_split(metadata, split_path=PATIENT_SPLIT_PATH, seed=SEED):
     if os.path.exists(split_path):
         return pd.read_csv(split_path, dtype={"patient_id": str})
 
-    patient_ids = metadata["patient_id"].unique()
-    shuffled = np.random.RandomState(seed).permutation(patient_ids)
-
-    n = len(shuffled)
-    n_train = int(round(n * SPLIT_FRACTIONS["train"]))
-    n_val = int(round(n * SPLIT_FRACTIONS["val"]))
-    splits = ["train"] * n_train + ["val"] * n_val + ["test"] * (n - n_train - n_val)
-
-    split_df = pd.DataFrame({"patient_id": shuffled, "split": splits})
+    split_df = _generate_split_df(metadata["patient_id"].unique(), seed)
     os.makedirs(os.path.dirname(split_path), exist_ok=True)
+    split_df.to_csv(split_path, index=False)
+    return split_df
+
+
+def get_alternate_patient_split(metadata, seed, split_dir=SPLIT_SENSITIVITY_DIR):
+    """Loads (or generates, on first call) one additional patient-level
+    70/15/15 split for the split-sensitivity robustness check — a new
+    draw of which patients land in train/val/test, independent of the
+    canonical patient_split.csv, which this never touches or regenerates.
+    See CLAUDE.md, Study A Split Sensitivity.
+    """
+    split_path = os.path.join(split_dir, f"patient_split_seed{seed}.csv")
+    if os.path.exists(split_path):
+        return pd.read_csv(split_path, dtype={"patient_id": str})
+
+    split_df = _generate_split_df(metadata["patient_id"].unique(), seed)
+    os.makedirs(split_dir, exist_ok=True)
     split_df.to_csv(split_path, index=False)
     return split_df
 

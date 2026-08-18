@@ -176,9 +176,10 @@ truth everything else is measured against.
   reported gap (same direction, within 2 AUC points), using its canonical
   seed=42 run. 70/30 and 50/50 are internal comparison points, not
   independently oracle-gated. A patient-level bootstrap CI (~1,000
-  resamples) on the 90/10 gap, and the cross-seed gap spread (see Seed
-  Replication below), are logged in CHANGELOG.md as robustness notes —
-  both non-gating; the pass/fail criterion stays the single seed=42 run.
+  resamples) on the 90/10 gap, the cross-seed gap spread (see Seed
+  Replication below), and the cross-split gap spread (see Split
+  Sensitivity below), are logged in CHANGELOG.md as robustness notes —
+  all non-gating; the pass/fail criterion stays the single seed=42 run.
 - **`true_age` column:** carried for completeness/future reference; not a
   manipulated variable or part of Study A's oracle.
 
@@ -234,6 +235,49 @@ truth everything else is measured against.
   `results/study_a/logs/`, `results/study_a/seed_replication/`) are not
   frozen deliverables — only the three `predictions_*.csv` and
   `patient_split.csv` are (see Deliverable to merge above).
+
+### Study A — Split Sensitivity (finalized)
+
+- **Why:** the test oracle checks the reproduced gap on a single
+  patient-level 70/15/15 split (seed 42). A single split can't distinguish
+  "the imbalance causes this gap" from "this particular set of patients
+  happened to land in test" — this is the split-level counterpart to Seed
+  Replication above, which instead checks training stochasticity on that
+  same fixed split.
+- **Scope:** only the 90/10 arm, canonical training seed=42, is affected.
+  70/30 and 50/50 are out of scope, for the same reason they're out of
+  scope for Seed Replication (see Test oracle scope above).
+- **Splits used:** 3 additional patient-level 70/15/15 splits generated
+  with seeds 101, 102, 103 — distinct from the 42-46 range already used
+  for weight-init/data-loader-shuffle seeding, so the two kinds of seed are
+  never confused. These are **new splits** (different patients land in
+  train/val/test each time), not repeated training runs on the same
+  split — this checks split sensitivity, not training stochasticity.
+- **Procedure:** for each of the 3 alternate splits, rebuild the
+  undersampled 90/10 training set from that split (same undersampling
+  procedure as the canonical split), train once with the canonical
+  training seed=42, and recompute the subgroup AUC gap (same
+  direction/magnitude check as the main oracle).
+- **Output contract:** the canonical split's canonical seed=42 run still
+  writes the frozen `results/study_a/predictions_90_10.csv` and
+  `results/study_a/patient_split.csv` — Study B's input contract is
+  unchanged. The 3 alternate splits write to
+  `results/study_a/split_sensitivity/patient_split_seed{N}.csv` and
+  `results/study_a/split_sensitivity/predictions_90_10_split{N}.csv`,
+  which are explicitly **not** part of the Study A → Study B handoff (see
+  Frozen Handoff above) — Study B reads only `predictions_90_10.csv` and
+  `patient_split.csv`.
+- **Reporting:** the cross-split gap spread (mean, range, direction
+  agreement across the 3 alternate splits vs. the canonical split) is a
+  non-gating robustness note in CHANGELOG.md, alongside the existing
+  cross-training-seed spread — the pass/fail oracle criterion itself stays
+  the single canonical seed=42, canonical-split run. `src/metrics.py`
+  computes this, following the same pattern as the cross-seed spread
+  computation.
+- **Auxiliary outputs** (`results/study_a/split_sensitivity/`) are not a
+  frozen deliverable — only the three `predictions_*.csv` and
+  `patient_split.csv` from the canonical split are (see Deliverable to
+  merge above).
 
 ---
 
