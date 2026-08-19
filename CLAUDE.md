@@ -103,6 +103,38 @@ design. This makes it structurally impossible for Study B to retrain,
 re-infer, or accidentally use a different model than the one that passed the
 test oracle.
 
+**What `results/study_a/` actually contains after the merge — read this
+before writing Study B's loader.** The merge brings in Study A's full
+history, not just the two permitted files. After merging, `results/study_a/`
+on `main` contains:
+
+```
+results/study_a/
+├── patient_split.csv                  # ALLOWED (confirmation only)
+├── predictions_90_10.csv              # ALLOWED — the only real input
+├── predictions_70_30.csv              # NOT ALLOWED — Study A's own ratio comparison
+├── predictions_50_50.csv              # NOT ALLOWED — Study A's own ratio comparison
+├── seed_replication/                  # NOT ALLOWED — training-seed robustness runs (see Seed Replication)
+│   └── predictions_{arm}_seed{N}.csv
+├── split_sensitivity/                 # NOT ALLOWED — alternate-split robustness runs (see Split Sensitivity)
+│   ├── patient_split_seed{N}.csv
+│   └── predictions_90_10_split{N}.csv
+└── n_sensitivity/                     # NOT ALLOWED — N=5,000 sample-size sensitivity pass
+    └── predictions_{arm}_N5000[_seed{N}].csv
+```
+
+26 auxiliary CSVs sit alongside the 2 allowed files, all matching the same
+`predictions_*.csv` naming pattern and column schema — nothing about the
+directory listing or file contents visually distinguishes an allowed file
+from a forbidden one. **`src/run_study_b.py`'s loader must hardcode the two
+exact filenames above (`predictions_90_10.csv`, `patient_split.csv`) — never
+glob `results/study_a/*.csv`, never glob `predictions_*.csv`, and never walk
+into `seed_replication/`, `split_sensitivity/`, or `n_sensitivity/`.** If
+Study B's own robustness checks later need multiple predictions files (e.g.
+to sanity-check epsilon-sweep stability), generate them within
+`results/study_b/`, from the one allowed input — do not reach back into
+Study A's auxiliary directories for a shortcut.
+
 ---
 
 ## Study A — Baseline
@@ -415,7 +447,7 @@ truth everything else is measured against.
 - **What this does and doesn't mean for Study B:** Study A's own gap is
   still correctly signed and statistically significant (bootstrap 95% CI
   [0.0230, 0.1118] excludes zero — see Canonical oracle result in
-  `paper/study_a_draft.tex`). That is what Study B actually needs — a
+  `paper/study_drafts/study_a_draft.tex`). That is what Study B actually needs — a
   real, non-trivial, correctly-signed subgroup gap to test whether
   DP-protected demographics preserve or wash it out. It is not a claim
   that this pipeline exactly reproduces Larrazabal et al.'s reported
@@ -434,8 +466,14 @@ applies `src/dp_mechanisms.py` to the frozen predictions file (e.g.
 `results/study_a/patient_split.csv` (confirmation only), `src/dp_mechanisms.py`
 **Must not:** call `src/train.py` or `src/data_loading.py`; touch `data/`;
 retrain, re-infer, or regenerate any Study A prediction; read
-`predictions_70_30.csv` / `predictions_50_50.csv`; vary the imbalance ratio
-(fixed to the single input file above).
+`predictions_70_30.csv` / `predictions_50_50.csv`, or anything under
+`seed_replication/`, `split_sensitivity/`, or `n_sensitivity/`; vary the
+imbalance ratio (fixed to the single input file above). **Before writing
+`src/run_study_b.py`'s loader, read "What `results/study_a/` actually
+contains after the merge" under The Frozen Handoff above** — the directory
+holds 26 auxiliary CSVs beyond the 2 allowed files, all matching the same
+naming pattern; the loader must hardcode the two exact filenames, never
+glob.
 
 - **Question:** does a DP-protected demographic label preserve the true
   subgroup AUC gap, or wash it out?
@@ -518,10 +556,18 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
 │   └── run_study_c.py     # Study C only
 │
 ├── results/
-│   ├── study_a/           # predictions_*.csv, patient_split.csv — frozen once merged
+│   ├── study_a/           # predictions_90_10/70_30/50_50.csv, patient_split.csv — frozen once merged
+│   │   ├── seed_replication/     # NOT part of the Study A → B handoff — see Frozen Handoff
+│   │   ├── split_sensitivity/    # NOT part of the Study A → B handoff — see Frozen Handoff
+│   │   └── n_sensitivity/        # NOT part of the Study A → B handoff — see Frozen Handoff
 │   ├── study_b/           # epsilon_sweep_results.csv
 │   └── study_c/           # detection_floor.csv
 │
 └── paper/
-    └── Final_Policy_Recommendation.tex
+    ├── Final_Policy_Recommendation.tex   # untouched until all 3 studies are done — then rewritten to
+    │                                     # combine the original policy paper with the studies' findings
+    └── study_drafts/                     # internal, numbers-focused per-study records (not paper prose)
+        ├── study_a_draft.tex
+        ├── study_b_draft.tex             # created once Study B has results to record
+        └── study_c_draft.tex             # created once Study C has results to record
 ```

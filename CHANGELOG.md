@@ -1,5 +1,34 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-19 (pre-merge hardening: auxiliary-file guardrail + paper/ restructure)
+- **Auxiliary-file guardrail for Study B.** The upcoming merge of `study-a`
+  into `main` brings in more than the two files Study B is allowed to read —
+  26 auxiliary CSVs under `results/study_a/seed_replication/`,
+  `split_sensitivity/`, and `n_sensitivity/` land in the same directory,
+  matching the same `predictions_*.csv` naming pattern and column schema as
+  the two allowed files, with nothing visually distinguishing allowed from
+  forbidden. Documented this explicitly in CLAUDE.md: a new subsection under
+  "The Frozen Handoff" spells out the full post-merge directory listing with
+  ALLOWED/NOT ALLOWED markers on every entry, and instructs
+  `src/run_study_b.py`'s loader to hardcode the two exact filenames rather
+  than glob. Study B's "Must not" bullet also now names the three forbidden
+  subdirectories explicitly (previously only named the two forbidden sibling
+  CSVs, not the subdirectories) and points back to that section. No code
+  changes yet — `src/run_study_b.py` doesn't exist until the `study-b`
+  branch — this closes the documentation gap before that loader gets
+  written, not after.
+- **`paper/` restructured into a two-tier layout**, at the user's request:
+  `paper/Final_Policy_Recommendation.tex` stays untouched until all three
+  studies are complete, at which point it will be rewritten to combine the
+  existing policy paper with the studies' findings. Per-study internal,
+  numbers-focused result records (not paper prose) now live in
+  `paper/study_drafts/` — `study_a_draft.tex` moved there via `git mv`
+  (history preserved); `study_b_draft.tex` and `study_c_draft.tex` will be
+  created in the same directory once those studies have results to record,
+  not stubbed out empty now. Updated the one cross-reference to the old
+  `paper/study_a_draft.tex` path inside CLAUDE.md's Magnitude Oracle
+  Resolution section, and the File Layout tree.
+
 ## [Study A] 2026-08-19 (magnitude oracle resolution against Larrazabal Fig. 1)
 - Closed out the manual magnitude comparison that every prior entry below
   deferred ("left for manual comparison against Figure 1") without ever
