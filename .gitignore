@@ -7,3 +7,8 @@ __pycache__/
 venv_path.txt
 results/study_a/checkpoints/
 results/study_a/logs/
+
+# Reference materials (copyrighted third-party sources, not redistributed via the repo)
+notebooks/*.pdf
+notebooks/*.jpg
+notebooks/*:Zone.Identifier
