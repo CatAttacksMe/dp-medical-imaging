@@ -209,26 +209,37 @@ truth everything else is measured against.
   distinguish "the imbalance causes this gap" from "this particular
   weight-init/batch-order draw happened to produce this gap" — only the
   arm actually checked against an external claim needs this defended.
-- **Scope:** only the 90/10 arm is replicated, across 5 seeds
-  (42, 43, 44, 45, 46). 70/30 and 50/50 stay single-run (seed 42) — they
-  aren't independently oracle-gated (see Test oracle scope above), so
-  replicating them defends a claim nobody is making.
+- **Scope:** the 90/10 arm is replicated across 5 seeds (42, 43, 44, 45,
+  46) — it's the only oracle-gated arm (see Test oracle scope above), so
+  it gets full robustness treatment (this section, plus bootstrap CI and
+  Split Sensitivity). 70/30 and 50/50 additionally get a **lighter**
+  3-seed replication (42, 43, 44) as of 2026-08-19 — not because they're
+  oracle-gated, but because the cross-arm trend (gap shrinking as
+  training-set balance improves, an internal Study A finding) is itself a
+  claim worth defending against seed noise: the 90/10 5-seed spread
+  showed a real range (0.0396-0.0670), so a single point estimate per arm
+  risked overstating how clean the trend is. This addition is
+  informational only — no bootstrap CI and no split-sensitivity run for
+  70/30 or 50/50, matching the effort to what the claim needs rather than
+  giving them full parity with 90/10.
 - **What varies vs. what stays fixed across replicate seeds:** only
   weight init (the new classifier head) and data-loader shuffling order
   vary by seed. The patient split and the 90/10 arm's undersampled
   training patients are always drawn with the canonical seed 42,
   identical across all 5 runs — otherwise composition noise and training
   noise would be conflated, defeating the point of the replication.
-- **Output contract:** the canonical seed=42 run still writes the frozen
-  `results/study_a/predictions_90_10.csv` — Study B's input contract is
-  unchanged. Seeds 43-46 write to
-  `results/study_a/seed_replication/predictions_90_10_seed{N}.csv`,
-  which is explicitly **not** part of the Study A → Study B handoff (see
-  Frozen Handoff above) — Study B reads only `predictions_90_10.csv`.
+- **Output contract:** the canonical seed=42 run for each arm still
+  writes the frozen `results/study_a/predictions_{arm}.csv` — Study B's
+  input contract (90/10 only) is unchanged. Replicate seeds write to
+  `results/study_a/seed_replication/predictions_{arm}_seed{N}.csv`
+  (43-46 for 90/10; 43-44 for 70/30 and 50/50), which is explicitly
+  **not** part of the Study A → Study B handoff (see Frozen Handoff
+  above) — Study B reads only `predictions_90_10.csv`.
 - **Reporting:** the cross-seed gap spread (mean, range, direction
-  agreement) is a non-gating robustness note in CHANGELOG.md, computed
-  from all 5 runs — the pass/fail oracle criterion itself stays the
-  single seed=42 run, to keep it simple and avoid re-litigating what
+  agreement) is a non-gating robustness note in CHANGELOG.md for each
+  replicated arm — 90/10 from all 5 runs, 70/30 and 50/50 from their 3
+  runs each — the pass/fail oracle criterion itself stays the single
+  90/10 seed=42 run, to keep it simple and avoid re-litigating what
   "passing" means. `src/metrics.py` computes this, not `src/train.py`,
   which only produces predictions CSVs.
 - **Auxiliary outputs** (`results/study_a/checkpoints/`,

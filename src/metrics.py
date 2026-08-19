@@ -189,15 +189,26 @@ def main():
     )
 
     if args.note in ("seed", "both"):
-        replicate_seeds = [s for s in tr.REPLICATION_SEEDS["90_10"] if s != dl.SEED]
-        replicate_gaps = [
-            subgroup_auc_gap(
-                _load_predictions(tr._output_path("90_10", seed), "python train.py --arm 90_10")
+        # 90/10 is the oracle-gated arm (full 5-seed spread); 70/30 and
+        # 50/50 get a lighter 3-seed spread (canonical + 43-44) added
+        # 2026-08-19 to check the cross-arm gap trend isn't a single-run
+        # artifact — see CLAUDE.md, Study A Seed Replication. All of these
+        # stay non-gating notes regardless of arm.
+        for arm in tr.ARMS:
+            seeds = tr.REPLICATION_SEEDS.get(arm)
+            if not seeds:
+                continue
+            arm_canonical_gap = subgroup_auc_gap(
+                _load_predictions(tr._output_path(arm, dl.SEED), f"python train.py --arm {arm}")
             )
-            for seed in replicate_seeds
-        ]
-        result = cross_seed_gap_spread(canonical_gap, replicate_gaps)
-        print("cross-seed gap spread:", result)
+            replicate_gaps = [
+                subgroup_auc_gap(
+                    _load_predictions(tr._output_path(arm, seed), f"python train.py --arm {arm}")
+                )
+                for seed in seeds if seed != dl.SEED
+            ]
+            result = cross_seed_gap_spread(arm_canonical_gap, replicate_gaps)
+            print(f"cross-seed gap spread [{arm}]:", result)
 
     if args.note in ("split", "both"):
         alternate_gaps = [

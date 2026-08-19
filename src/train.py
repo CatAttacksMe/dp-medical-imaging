@@ -38,11 +38,17 @@ SEED = dl.SEED  # canonical seed: patient split, undersampling, and each
                  # arm's canonical training run
 ARMS = ["90_10", "70_30", "50_50"]
 
-# Only the oracle-gated 90/10 arm is replicated (5 seeds: canonical 42 +
-# 43-46) to check its gap isn't a one-run fluke. 70/30 and 50/50 aren't
-# independently oracle-gated, so they stay single-run. See CLAUDE.md,
-# Study A Seed Replication.
-REPLICATION_SEEDS = {"90_10": [42, 43, 44, 45, 46]}
+# The oracle-gated 90/10 arm gets full replication (5 seeds: canonical 42
+# + 43-46) to check its gap isn't a one-run fluke. 70/30 and 50/50 aren't
+# independently oracle-gated, but get a lighter 3-seed replication
+# (canonical 42 + 43-44) as of 2026-08-19 to check the cross-arm gap
+# trend isn't overstated by single-run noise — see CLAUDE.md, Study A
+# Seed Replication.
+REPLICATION_SEEDS = {
+    "90_10": [42, 43, 44, 45, 46],
+    "70_30": [42, 43, 44],
+    "50_50": [42, 43, 44],
+}
 
 LEARNING_RATE = 3e-5
 MAX_EPOCHS = 20
