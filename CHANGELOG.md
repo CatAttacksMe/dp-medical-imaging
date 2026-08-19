@@ -1,5 +1,41 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-19 (full sweep results)
+- Ran the full sweep: 90/10 arm (canonical seed=42 + replication seeds
+  43-46), 70/30 arm, 50/50 arm, and split-sensitivity (alternate splits
+  101-103, canonical training seed=42), per CLAUDE.md's Study A design.
+  All runs completed without errors; predictions CSVs match the fixed
+  16,653-row test set on the canonical split, invariant checks pass.
+- **Canonical 90/10 gap (seed=42, canonical split):** 0.0670 patient-level
+  AUC (majority male AUC minus minority female AUC).
+- **Oracle direction check:** PASS (majority AUC > minority AUC, as
+  Larrazabal et al. report). The magnitude half of the oracle
+  ("within 2 AUC points") is not automated — see `check_oracle_direction`'s
+  docstring and the 2026-08-18 pre-flight entry: Larrazabal et al. (2020)
+  report Pneumothorax only as box plots (Fig. 1, panels B-2/C-2) with no
+  90/10 point and no numeric table, so there's no reliable number to check
+  against programmatically. Reporting the gap value here for manual
+  comparison against Figure 1.
+- **Bootstrap 95% CI** (patient-level, stratified by sex, 1,000 resamples,
+  `BOOTSTRAP_SEED=1042`) on the canonical gap: **[0.0230, 0.1118]**,
+  excludes zero.
+- **Cross-seed gap spread** (90/10 arm, canonical split, seeds 42-46):
+  canonical=0.0670, other seeds (43-46)=[0.0396, 0.0599, 0.0437, 0.0574],
+  mean=0.0535, range=[0.0396, 0.0670], direction agreement=True (all 5
+  seeds show majority AUC > minority AUC).
+- **Cross-split gap spread** (90/10 arm, canonical training seed=42,
+  splits 101-103): canonical=0.0670, other splits=[0.0722, 0.0815,
+  0.0657], mean=0.0716, range=[0.0657, 0.0815], direction agreement=True
+  (all 3 alternate splits show majority AUC > minority AUC).
+- Per-arm final test patient-AUC: 90/10 seed42=0.8848 (male), seed43
+  replicate whole-run test-AUC=0.8758, seed44=0.8812, seed45=0.8256,
+  seed46=0.8614; 70/30 seed42=0.8801; 50/50 seed42=0.8845. (These are
+  whole-test-set AUCs from training logs, not the sex-disaggregated
+  subgroup AUCs the gap figures above are computed from.)
+- Pass/fail verdict on gap *magnitude* against Larrazabal et al. is
+  intentionally not stated here — left for manual comparison against
+  Figure 1, per CLAUDE.md's Test oracle scope section.
+
 ## [Study A] 2026-08-18 (pre-flight review fixes)
 - Findings from a pre-run readiness/reviewer pass, addressed before starting
   the real training sweep:
