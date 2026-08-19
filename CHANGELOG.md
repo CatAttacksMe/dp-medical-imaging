@@ -1,5 +1,60 @@
 # Changelog / Lab Notes
 
+## [Shared] 2026-08-19 (add privatize_categorical_label; discard reassignment mechanism)
+- A technical review of Study B's first epsilon-sweep result (before it was
+  pushed anywhere) found two disqualifying problems with the mechanism —
+  see CLAUDE.md's rewritten "Study B — Subgroup Assignment Mechanism" for
+  the full account:
+  1. **Construct validity.** The discarded mechanism reconstructed a
+     per-patient group assignment by randomly moving just enough patients
+     — starting from their *true* labels — to match a DP-noised aggregate
+     count. At epsilon=10, 0 of 4,620 patients were ever reassigned; even
+     at epsilon=0.1, ~7 were. The experiment could not have shown a
+     different qualitative result across almost the entire sweep,
+     regardless of whether genuinely privacy-protected per-record data
+     would preserve the audit — it measured aggregate-count concentration
+     at large N, not what the study actually asks.
+  2. **Privacy accounting.** The aggregate mechanism's "full epsilon per
+     category via parallel composition" claim assumes add/remove
+     adjacency, but `patient_split.csv` is committed to git — cohort
+     membership is already public, so the real threat model is attribute
+     (substitute-one) privacy, under which that composition claim doesn't
+     hold (a single attribute flip changes two bin counts at once,
+     breaking parallel composition's precondition; sequential composition
+     would apply instead, costing ~2x epsilon).
+- **All `study-b`-branch-only commits from the discarded version were
+  reset away** (the branch had never been pushed to origin — see this
+  entry's git log for what remains). Not kept with a superseding commit;
+  nothing about the discarded mechanism was worth preserving as a paper
+  trail. The already-pushed `main` commits from the same session (the
+  diffprivlib/scikit-learn fix, `dp_mechanisms.py` itself, the
+  `EPSILON_SWEEP` extension) were kept — none of those are wrong, only the
+  study-B-specific reassignment logic and its epsilon-sweep results were.
+- **New function `privatize_categorical_label`** in `src/dp_mechanisms.py`
+  — per-record randomized response via diffprivlib's `Binary` mechanism
+  (kept with probability e^epsilon/(1+e^epsilon), flipped otherwise),
+  applied independently to every record. Fixes both problems above: every
+  output label is a genuine per-record randomized draw, and there's no
+  aggregate count or cross-bin composition question at all. Added a
+  module-level adjacency-model note to `dp_mechanisms.py` explaining which
+  existing functions assume add/remove adjacency (general aggregate
+  releases — still valid for their own use cases) vs. this new
+  substitute-adjacency, attribute-privacy function.
+- **New checks in `check_dp_mechanisms.py`** (4 added, 16/16 total pass):
+  `label_flip_probability_matches_theory` (empirical kept-rate vs.
+  e^epsilon/(1+e^epsilon) across 5 epsilons — the core correctness check,
+  since a wrong flip probability would still produce plausible-looking
+  M/F output with no crash), `label_output_domain_is_value0_or_value1`,
+  `label_reproducible_with_same_seed`, `label_adds_real_noise_at_low_epsilon`.
+  `nonpositive_epsilon_raises` extended to cover the new function too.
+- **Not yet done:** `src/run_study_b.py` doesn't exist yet on the reset
+  `study-b` branch — this entry covers the shared-infra fix only.
+  `EPSILON_SWEEP` is unchanged for now (still the range tuned to the
+  discarded mechanism); CLAUDE.md now flags explicitly that it needs
+  re-diagnosing against the new mechanism's very different noise profile
+  (e.g. epsilon=1 already flips ~27% of labels, vs. ~1 patient reassigned
+  under the old mechanism at the same epsilon) before the next sweep runs.
+
 ## [Shared] 2026-08-19 (extend EPSILON_SWEEP below 0.1)
 - While building `src/run_study_b.py`, the first run against the original
   `EPSILON_SWEEP = [0.1, 0.5, 1, 2, 5, 10]` found the DP-protected 90/10

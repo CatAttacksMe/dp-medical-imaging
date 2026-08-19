@@ -2,8 +2,38 @@
 
 Reviewed infrastructure (see CLAUDE.md, Shared Infrastructure) — changes
 here must still pass src/check_dp_mechanisms.py before either study branch
-pulls in a new version. All mechanisms use the Laplace mechanism
-(diffprivlib), pure epsilon-DP (no delta).
+pulls in a new version. All mechanisms use diffprivlib, pure epsilon-DP (no
+delta).
+
+Two different neighboring-database (adjacency) models are in play here, and
+the functions below split cleanly along that line — mixing them up (using
+the wrong function for the wrong question) is the kind of mistake this note
+exists to prevent:
+
+- **Add/remove adjacency** — protects whether an individual is *in the
+  dataset at all*. `privatize_categorical_counts`, `privatize_age_mean`,
+  `privatize_age_histogram`, and `privatize_categorical_proportions` all
+  assume this model: they release *aggregate* statistics (a count, a mean,
+  a histogram) via the Laplace mechanism, and lean on parallel composition
+  across disjoint category bins — valid under add/remove adjacency because
+  removing one record changes exactly one bin's count. This is the right
+  tool for "how many patients of each kind exist" questions.
+- **Substitute-one (attribute) adjacency** — protects what a *known*
+  individual's attribute value is, while their presence in the dataset is
+  already public. This is the actual threat model for Study B's use case:
+  `results/study_a/patient_split.csv` is committed to git, so the test
+  cohort's membership is already fully public — what's sensitive is each
+  patient's sex, not whether they're in the study. Under this model, a
+  single attribute substitution changes *two* aggregate bin counts at
+  once (one down, one up), which breaks parallel composition's
+  precondition that a record affects at most one bin — so the aggregate
+  functions above are the wrong tool here; releasing both bin counts
+  independently at "full epsilon each" would actually cost ~2x epsilon
+  under this model, not epsilon. `privatize_categorical_label` (below)
+  sidesteps the question entirely by protecting one record's attribute
+  directly, with a single well-defined per-record epsilon-DP guarantee
+  that doesn't depend on cohort size or which adjacency model applies to
+  the rest of the dataset.
 """
 
 import numpy as np
@@ -16,7 +46,7 @@ import numpy as np
 # here — see CHANGELOG.md, [Shared] diffprivlib/sklearn fix. If that pin is
 # ever revisited, re-verify `import diffprivlib` still works before
 # assuming this module still does.
-from diffprivlib.mechanisms import Laplace
+from diffprivlib.mechanisms import Binary, Laplace
 
 EPSILON_SWEEP = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]
 
@@ -159,3 +189,31 @@ def privatize_categorical_proportions(counts, epsilon, total=None, confidence=0.
             "ci_upper": float(np.clip(proportion + half_width, 0.0, 1.0)),
         }
     return results
+
+
+def privatize_categorical_label(values, epsilon, value0, value1, random_state=None):
+    """Per-record randomized response for a binary attribute (e.g. sex) —
+    substitute-one (attribute) adjacency, see module docstring.
+
+    Each record's true value is independently passed through
+    diffprivlib's classic Binary mechanism: kept as-is with probability
+    e^epsilon / (1 + e^epsilon), flipped to the other value otherwise.
+    This is a single well-defined epsilon-DP query per record — there is
+    no aggregate count, no cross-bin composition question, and no
+    dependence on whether the rest of the cohort's membership is public.
+
+    Every record in the output is a genuine randomized-response draw (not
+    "true unless selected for adjustment") — this is the primitive to use
+    when downstream analysis needs a full per-record labeling (e.g.
+    recomputing a subgroup AUC), where an aggregate count alone can't
+    supply group membership for any specific record.
+
+    `values` — any sequence of `value0`/`value1` labels. Returns a list of
+    the same length, each entry independently randomized.
+    """
+    seeds = _split_seeds(random_state, len(values))
+    result = []
+    for value, seed in zip(values, seeds):
+        mech = Binary(epsilon=epsilon, value0=value0, value1=value1, random_state=seed)
+        result.append(mech.randomise(value))
+    return result

@@ -168,10 +168,54 @@ def proportions_ci_achieves_nominal_coverage():
 
 
 @check
+def label_flip_probability_matches_theory():
+    """The core correctness check for privatize_categorical_label: kept
+    probability should match e^epsilon / (1 + e^epsilon), the standard
+    randomized-response calibration — a wrong flip probability would still
+    produce plausible-looking M/F output with no crash, exactly the kind
+    of bug that needs an empirical check to catch."""
+    n_trials = 4000
+    for epsilon in [0.01, 0.1, 1, 2, 5]:
+        draws = dp.privatize_categorical_label(["M"] * n_trials, epsilon, "M", "F", random_state=1)
+        empirical_kept = sum(d == "M" for d in draws) / n_trials
+        theoretical_kept = np.exp(epsilon) / (1 + np.exp(epsilon))
+        # Binomial SE at n=4000 is at most ~0.8%; allow +/-3% slack.
+        assert abs(empirical_kept - theoretical_kept) < 0.03, (
+            f"epsilon={epsilon}: empirical kept-rate {empirical_kept:.3f}, theoretical {theoretical_kept:.3f}"
+        )
+
+
+@check
+def label_output_domain_is_value0_or_value1():
+    draws = dp.privatize_categorical_label(["M", "F", "M", "M", "F"] * 20, epsilon=0.5, value0="M", value1="F", random_state=7)
+    assert set(draws) <= {"M", "F"}, set(draws)
+    assert len(draws) == 100
+
+
+@check
+def label_reproducible_with_same_seed():
+    values = ["M", "F", "M"] * 10
+    a = dp.privatize_categorical_label(values, epsilon=1.0, value0="M", value1="F", random_state=123)
+    b = dp.privatize_categorical_label(values, epsilon=1.0, value0="M", value1="F", random_state=123)
+    assert a == b, "same random_state gave different results"
+
+
+@check
+def label_adds_real_noise_at_low_epsilon():
+    """At epsilon near 0, output should look close to a coin flip, not a
+    passthrough of the true value."""
+    n_trials = 4000
+    draws = dp.privatize_categorical_label(["M"] * n_trials, epsilon=0.001, value0="M", value1="F", random_state=2)
+    kept_rate = sum(d == "M" for d in draws) / n_trials
+    assert abs(kept_rate - 0.5) < 0.03, f"expected near-coin-flip at epsilon=0.001, got kept-rate={kept_rate:.3f}"
+
+
+@check
 def nonpositive_epsilon_raises():
     for fn, args in [
         (dp.privatize_categorical_counts, ({"A": 1}, 0)),
         (dp.privatize_age_mean, ([1, 2, 3], -1)),
+        (dp.privatize_categorical_label, (["M", "F"], 0, "M", "F")),
     ]:
         try:
             fn(*args)

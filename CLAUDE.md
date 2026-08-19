@@ -58,9 +58,19 @@ noise logic locally. Treat this file as reviewed infrastructure, not
 experimental code — changes must still pass its own unit tests before either
 study branch pulls in a new version.
 
-- `privatize_categorical_counts(...)` — sex counts (Study B)
-- `privatize_age_mean(...)` / `privatize_age_histogram(...)` — age (Study B)
-- `privatize_categorical_proportions(...)` — subgroup prevalence (Study C)
+- `privatize_categorical_label(...)` — per-record randomized response on a
+  binary attribute (Study B's actual subgroup-AUC mechanism, see Subgroup
+  Assignment Mechanism below). Substitute-one/attribute adjacency.
+- `privatize_categorical_counts(...)` — aggregate category counts, general
+  purpose (e.g. representativeness checks) — no longer Study B's
+  subgroup-AUC mechanism as of the 2026-08-19 rework. Add/remove
+  adjacency — see the adjacency-model note at the top of
+  `src/dp_mechanisms.py` before using this for anything attribute-privacy
+  shaped.
+- `privatize_age_mean(...)` / `privatize_age_histogram(...)` — age, general
+  purpose. Add/remove adjacency, same caveat as above.
+- `privatize_categorical_proportions(...)` — subgroup prevalence (Study C).
+  Add/remove adjacency, same caveat as above.
 - `EPSILON_SWEEP = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]` — the
   fixed sweep. Extended below 0.1 on 2026-08-19 after the original
   0.1-10 range turned out to never wash out the 90/10 gap at all (see
@@ -481,78 +491,80 @@ glob.
 
 - **Question:** does a DP-protected demographic label preserve the true
   subgroup AUC gap, or wash it out?
-- **Epsilon sweep:** fixed to `EPSILON_SWEEP` in `src/dp_mechanisms.py` —
-  `{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10}` (extended below 0.1 on
-  2026-08-19 — see Subgroup Assignment Mechanism below for why). No ad hoc
-  epsilon values without updating that constant.
-- **Mechanism:** Laplace mechanism (diffprivlib), applied once per release.
-  No repeated querying of the same privatized release — a future second
-  query against the same data requires explicit composition accounting, not
-  an ad hoc second call.
+- **Epsilon sweep:** fixed to `EPSILON_SWEEP` in `src/dp_mechanisms.py`.
+  Current value TBD after the 2026-08-19 rework (see Subgroup Assignment
+  Mechanism below) — the mechanism swap changes the noise profile
+  entirely, so the sweep needs re-diagnosing, not carried over from the
+  discarded design. No ad hoc epsilon values without updating that
+  constant once it's set.
+- **Mechanism:** `privatize_categorical_label` (per-record randomized
+  response, diffprivlib's `Binary` mechanism) applied independently to
+  every test patient's sex label — not an aggregate Laplace release. See
+  Subgroup Assignment Mechanism below for why this replaced the original
+  "Laplace mechanism, applied once per release" design.
 - **Test oracle:** at each epsilon, recompute the subgroup AUC gap using
-  DP-protected sex labels to assign subgroups (`true_label` /
-  `predicted_score` are unchanged from the frozen CSV — only the subgroup
-  assignment is noised — see Subgroup Assignment Mechanism below for how).
-  "Survives" = same direction + magnitude within 15% of the
-  true-demographic gap. "Washed out" = wrong direction or >15% off. Record
-  the crossover epsilon.
+  the per-record DP-protected sex labels directly (`true_label` /
+  `predicted_score` are unchanged from the frozen CSV — only the sex label
+  used to assign subgroups is noised, and it's noised for every patient,
+  not reconstructed from an aggregate). "Survives" = same direction +
+  magnitude within 15% of the true-demographic gap. "Washed out" = wrong
+  direction or >15% off. Record the crossover epsilon.
 - **Deliverable:** `results/study_b/epsilon_sweep_results.csv` (`epsilon`,
   `true_gap`, `dp_gap`, `direction_match`, `pct_diff`, `survived`) + the
   crossover epsilon noted in CHANGELOG.md.
 
-### Study B — Subgroup Assignment Mechanism (finalized, 2026-08-19)
+### Study B — Subgroup Assignment Mechanism (finalized, 2026-08-19, reworked same day)
 
-- **Why this needed deciding:** `privatize_categorical_counts` (and every
-  other function in `src/dp_mechanisms.py`) privatizes *aggregate*
-  quantities, not per-record labels. Computing a subgroup AUC requires
-  knowing, for each patient, which group they're in — an aggregate DP
-  count alone doesn't say *which* patients are male vs. female. The
-  original "recompute the subgroup AUC gap using DP-protected sex labels
-  to assign subgroups" wording didn't specify the missing step: how an
-  aggregate count release becomes a per-patient assignment.
-- **Mechanism (`reassign_subgroups` in `src/run_study_b.py`):** release
-  DP-noised M/F counts once per epsilon via `privatize_categorical_counts`
-  (one Laplace draw pair, per "applied once per release" above).
-  Renormalize to a target majority-group size against the true, public
-  total N (the two categories' noise draws are independent, so they don't
-  sum to N on their own). Starting from the true group assignment,
-  randomly move just enough patients between groups (reproducible seed) so
-  the realized group sizes exactly match that target. Chosen over a
-  per-patient probabilistic flip (each patient independently reassigned
-  with probability equal to the DP-implied share) so realized group sizes
-  always match what was actually "released," matching a literal reading of
-  the Test oracle wording.
-- **Why `EPSILON_SWEEP` was extended below 0.1:** the first run against the
-  original `{0.1, 0.5, 1, 2, 5, 10}` sweep found the gap survived every
-  single epsilon, with `pct_diff` never exceeding 1.1% even at epsilon=0.1.
-  Diagnosed by counting how many of the 4,620 test patients actually get
-  reassigned per epsilon: 0 at epsilon=10, ~1 at epsilon=1, ~7 at
-  epsilon=0.1 — because the count-release mechanism's noise scale is
-  `1/epsilon`, which is trivial next to cohort counts in the thousands.
-  Extending the sweep down to epsilon=0.001 found the actual transition:
-  mean `pct_diff` across repeated trials was ~2.5% at epsilon=0.03, ~9% at
-  epsilon=0.01, ~14% at epsilon=0.005, and epsilon=0.001 could push an
-  entire subgroup to size 0 (handled explicitly — see below, not a crash).
-  The added points (0.001, 0.005, 0.01, 0.05) bracket this transition; the
-  original six points are kept for continuity with commonly-cited
-  real-world epsilon values, even though none of them wash out the gap
-  under this mechanism.
-- **Total subgroup erasure at very low epsilon:** at low enough epsilon,
-  `reassign_subgroups` can (rarely, depending on the noise draw) push an
-  entire subgroup's realized size to 0, making that epsilon's AUC
-  undefined. `run_study_b.py` reports this explicitly — `dp_gap` = NaN,
-  `direction_match` = `survived` = `False` — rather than crashing or
-  silently skipping the row; it's total erasure, not a subtler
-  washing-out, and is itself a meaningful outcome to record.
-- **Not done (would be a larger scope change, not decided here):**
-  seed-replicating individual epsilon points near the crossover. A
-  diagnostic multi-trial check during development showed real variance at
-  the transition (e.g. epsilon=0.01's `pct_diff` ranged 0.3%-39% across 15
-  trials) — CLAUDE.md's Study B deliverable schema is one row per epsilon
-  (no seed column), so the shipped sweep stays single-draw-per-epsilon,
-  matching that schema; the variance near the crossover is a caveat to
-  report in CHANGELOG.md alongside the results, not a reason to change the
-  deliverable's shape without a separate decision to do so.
+- **First version (discarded) and why:** the original design released
+  DP-noised aggregate M/F counts once per epsilon
+  (`privatize_categorical_counts`), then reconstructed a per-patient
+  group assignment by randomly moving just enough patients between groups
+  — starting from the *true* assignment — to match the DP-implied target
+  size. A technical review before pushing found two disqualifying
+  problems, not minor caveats:
+  1. **Construct validity.** The artifact the AUC gap was computed on
+     wasn't privacy-protected data — it was the true per-patient labels
+     with minimal random perturbation. Diagnostic: at epsilon=10, 0 of
+     4,620 test patients were ever reassigned; even at epsilon=0.1, ~7
+     were. The experiment couldn't have shown a different qualitative
+     result at any epsilon where noise is small relative to cohort size
+     (i.e. almost the whole sweep) regardless of whether genuinely
+     privacy-protected per-record data would preserve the audit — it was
+     measuring "DP aggregate counts concentrate at large N," not "DP
+     labels preserve bias-audit conclusions."
+  2. **Privacy accounting.** `privatize_categorical_counts`'s "each
+     category gets the full epsilon via parallel composition" claim holds
+     under add/remove adjacency, but the actual threat model here is
+     attribute privacy on an already-public cohort (`patient_split.csv`
+     is committed to git — membership isn't secret, sex is) — substitute-
+     one adjacency, under which one patient's sex flip changes two bin
+     counts at once, breaking parallel composition's precondition.
+     Releasing both counts independently at "full epsilon each" under
+     that model actually costs ~2x epsilon via sequential composition.
+     See the adjacency-model note at the top of `src/dp_mechanisms.py`.
+  All of that version's commits were discarded (reset on the `study-b`
+  branch, which had never been pushed) rather than kept with a
+  superseding commit — nothing about the discarded mechanism is worth
+  preserving as a paper trail; this entry is the record of what happened
+  and why.
+- **Corrected mechanism:** `privatize_categorical_label` (new in
+  `src/dp_mechanisms.py`) applies diffprivlib's `Binary` mechanism
+  (classic randomized response) independently to *every* test patient's
+  true sex label — kept with probability e^epsilon / (1 + e^epsilon),
+  flipped otherwise. This fixes both problems at once: every patient's
+  released label is a genuine randomized draw (not "true unless swept up
+  in a rare reassignment"), and because it's a single per-record query
+  with no aggregate count involved, there's no cross-bin composition
+  question and no dependence on which adjacency model applies to the rest
+  of the cohort.
+- **Epsilon sweep will likely need re-deriving, not reused:** randomized
+  response's noise profile is entirely different from the discarded
+  aggregate-count mechanism's — at epsilon=1, ~27% of labels flip (vs.
+  ~1 patient out of 4,620 reassigned under the old mechanism at the same
+  epsilon). The `{0.001, ..., 10}` sweep extended for the old mechanism
+  should not be assumed correct for this one; re-run the same kind of
+  diagnostic (count/measure `pct_diff` across the range) before locking in
+  a final `EPSILON_SWEEP` value.
 
 ---
 
