@@ -178,6 +178,38 @@ def n_sensitivity_report(n_total=None):
     return pd.DataFrame(rows)
 
 
+def n_sensitivity_seed_spread(n_total=None, replicate_seeds=None):
+    """Cross-training-seed spread for the exploratory N=5,000 sample-size-
+    sensitivity pass (CLAUDE.md, Study A Sample-Size Sensitivity): checks
+    whether the single-seed N=5,000 gaps reported by n_sensitivity_report
+    are reliable, or an artifact of training stochasticity at this
+    smaller (likely noisier) budget. Canonical undersampling seed=42 and
+    canonical split throughout — only weight init/data-loader order vary
+    across seeds, same as cross_seed_gap_spread. Non-gating, exploratory.
+    """
+    if n_total is None:
+        n_total = tr.N_SENSITIVITY_TOTAL
+    if replicate_seeds is None:
+        replicate_seeds = [s for s in tr.N_SENSITIVITY_REPLICATION_SEEDS if s != dl.SEED]
+    results = {}
+    for arm in tr.ARMS:
+        canonical_path = tr._n_sensitivity_output_path(arm, dl.SEED, n_total)
+        canonical_gap = subgroup_auc_gap(
+            _load_predictions(canonical_path, "python train.py --n-sensitivity")
+        )
+        replicate_gaps = [
+            subgroup_auc_gap(
+                _load_predictions(
+                    tr._n_sensitivity_output_path(arm, seed, n_total),
+                    "python train.py --n-sensitivity-replicate",
+                )
+            )
+            for seed in replicate_seeds
+        ]
+        results[arm] = _gap_spread(canonical_gap, replicate_gaps)
+    return results
+
+
 def _load_predictions(path, run_hint):
     """Loads a predictions CSV, or raises with a pointer to the training
     command that produces it — a bare FileNotFoundError here wouldn't say
@@ -191,8 +223,8 @@ def _load_predictions(path, run_hint):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--note", choices=["seed", "split", "both", "n_sensitivity"], default="both",
-        help="which robustness note to compute",
+        "--note", choices=["seed", "split", "both", "n_sensitivity", "n_sensitivity_seed"],
+        default="both", help="which robustness note to compute",
     )
     args = parser.parse_args()
 
@@ -259,6 +291,12 @@ def main():
         result = n_sensitivity_report()
         print("sample-size-sensitivity report (single seed, exploratory):")
         print(result.to_string(index=False))
+
+    if args.note == "n_sensitivity_seed":
+        results = n_sensitivity_seed_spread()
+        print("N=5000 sample-size-sensitivity cross-seed gap spread (exploratory):")
+        for arm, result in results.items():
+            print(f"  {arm}: {result}")
 
     if not direction_ok:
         sys.exit(1)

@@ -309,44 +309,50 @@ truth everything else is measured against.
   ratio's effect on the subgroup gap looks different at a smaller, fixed
   training-set size, where no arm has "abundant" minority data — a
   data-scarcity regime where representation might matter more.
-- **Scope:** all three ratio arms (90/10, 70/30, 50/50), each trained
-  once at a fixed `N_total=5,000` (`dl.N_SENSITIVITY_TOTAL`) — well
-  within both the available majority pool (11,664) and minority pool
-  (9,900) at every ratio; 90/10 is the tightest case, needing 4,500
-  majority / 500 minority patients. Canonical training seed=42,
-  canonical split throughout. Single seed only — deliberately **not**
-  replicated (see Limits below).
+- **Scope:** all three ratio arms (90/10, 70/30, 50/50), trained at a
+  fixed `N_total=5,000` (`dl.N_SENSITIVITY_TOTAL`) — well within both
+  the available majority pool (11,664) and minority pool (9,900) at
+  every ratio; 90/10 is the tightest case, needing 4,500 majority / 500
+  minority patients. Canonical undersampling seed=42, canonical split
+  throughout. Initially single-seed only; extended same-day to a
+  **lighter 3-seed replication** (canonical 42 + 43-44,
+  `tr.N_SENSITIVITY_REPLICATION_SEEDS`) — same seed range and rationale
+  as 70/30's/50/50's Seed Replication above — after the single-seed
+  result showed a non-monotonic, opposite-direction pattern from the
+  canonical-N sweep, too surprising to report on a single run per
+  CLAUDE.md's own noise-floor findings elsewhere in this file. Only
+  weight init/data-loader order vary across the 3 seeds; the
+  undersampling draw stays canonical (seed=42) throughout, same rule as
+  the main Seed Replication section.
 - **Not in scope:** additional N_total levels (e.g. 1,000, 3,000,
-  10,000) and multi-seed replication at N=5,000 — considered and
-  deferred as disproportionate to what Study A needs. A full N×ratio
-  grid at reliable seed counts (3-5 seeds/cell, matching the precedent
-  set by Seed Replication above) would cost several times the GPU-hours
-  already spent on the canonical sweep, for a question (does the ratio
-  effect interact with data scale) that is secondary to Study A's actual
-  job of clearing the test oracle for Study B. If this exploratory pass
-  shows a pattern worth confirming, escalating to more seeds at
-  N=5,000 — not a wider N grid — is the natural next step, but is not
-  part of this addition.
-- **Output contract:** writes to
-  `results/study_a/n_sensitivity/predictions_{arm}_N5000.csv`
-  (`dl.N_SENSITIVITY_DIR`, via `python train.py --n-sensitivity`) —
-  explicitly **not** part of the Study A → Study B handoff (see Frozen
-  Handoff above); Study B reads only `predictions_90_10.csv` and
-  `patient_split.csv`.
-- **Reporting:** male/female subgroup AUC and gap per arm at N=5,000,
-  compared against each arm's canonical (N=11,664) gap, logged as a
-  non-gating, exploratory note in CHANGELOG.md — no CI, no direction
-  check, no pass/fail criterion. `src/metrics.py` computes this
-  (`n_sensitivity_report()`, `--note n_sensitivity`), following the same
-  pattern as the existing seed/split robustness notes.
-- **Limits:** single-seed point estimates only. Per the established
-  noise floor (patient-level bootstrap CI, cross-seed spreads, and the
-  Hanley-McNeil evaluation-noise analysis elsewhere in this file and
-  CHANGELOG.md), a single run at any N_total can't distinguish a real
-  ratio×N interaction from ordinary training/evaluation noise — this
-  pass is a scoping look, not a robustness-checked finding. Treat any
-  pattern here as motivation for a follow-up, not as a citable result on
-  its own.
+  10,000) — considered and deferred as disproportionate to what Study A
+  needs. A full N×ratio grid at reliable seed counts would cost several
+  times the GPU-hours already spent on the canonical sweep, for a
+  question (does the ratio effect interact with data scale) that is
+  secondary to Study A's actual job of clearing the test oracle for
+  Study B. N=1,000 specifically is also likely infeasible to interpret:
+  at 90/10 it implies ~100 female training patients, ~5 expected
+  positives at the dataset's ~5% pneumothorax prevalence — probably too
+  few to fine-tune on at all, not just noisier.
+- **Output contract:** canonical seed=42 writes
+  `results/study_a/n_sensitivity/predictions_{arm}_N5000.csv`; replicate
+  seeds 43-44 write `predictions_{arm}_N5000_seed{N}.csv`, same
+  directory (`dl.N_SENSITIVITY_DIR`, via `python train.py
+  --n-sensitivity` / `--n-sensitivity-replicate`) — explicitly **not**
+  part of the Study A → Study B handoff (see Frozen Handoff above);
+  Study B reads only `predictions_90_10.csv` and `patient_split.csv`.
+- **Reporting:** male/female subgroup AUC and gap per arm at N=5,000
+  (single-seed point estimate), compared against each arm's canonical
+  (N=11,664) gap — `n_sensitivity_report()`, `--note n_sensitivity` —
+  plus the cross-seed gap spread across the 3-seed replication —
+  `n_sensitivity_seed_spread()`, `--note n_sensitivity_seed` — both
+  logged as non-gating, exploratory notes in CHANGELOG.md. No CI, no
+  direction check, no pass/fail criterion.
+- **Limits:** even with the 3-seed replication, this remains a lighter
+  check than the canonical sweep gets (no bootstrap CI, no split
+  sensitivity, matching the same reduced-scope precedent already set for
+  70/30/50/50 vs. 90/10) — a scoping look at whether ratio and total-N
+  interact, not a robustness-checked finding on its own.
 
 ---
 

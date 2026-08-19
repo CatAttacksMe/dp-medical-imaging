@@ -307,28 +307,60 @@ def train_split_sensitivity(metadata, device, max_epochs=MAX_EPOCHS, force=False
     return predictions_by_seed
 
 
+# Lighter 3-seed replication (canonical 42 + 43-44) for the N=5,000 pass,
+# added 2026-08-19 after the single-seed result showed a non-monotonic,
+# opposite-direction pattern from canonical — same rationale and seed
+# range as 70/30's/50/50's REPLICATION_SEEDS above. Not a wider N grid;
+# see CLAUDE.md, Study A Sample-Size Sensitivity.
+N_SENSITIVITY_REPLICATION_SEEDS = [42, 43, 44]
+
+
+def _n_sensitivity_output_path(arm, run_seed, n_total):
+    """Canonical seed=42 writes predictions_{arm}_N{n_total}.csv (matches
+    the original single-seed pass, unchanged); replicate seeds write
+    predictions_{arm}_N{n_total}_seed{N}.csv, same directory — mirrors
+    _output_path's canonical-vs-seed_replication split, just without a
+    separate subdirectory since n_sensitivity/ is already exploratory-only.
+    """
+    if run_seed == SEED:
+        return os.path.join(N_SENSITIVITY_DIR, f"predictions_{arm}_N{n_total}.csv")
+    return os.path.join(N_SENSITIVITY_DIR, f"predictions_{arm}_N{n_total}_seed{run_seed}.csv")
+
+
 def train_n_sensitivity(
     metadata, split_df, device, n_total=N_SENSITIVITY_TOTAL, max_epochs=MAX_EPOCHS, force=False,
+    seeds=None,
 ):
-    """Trains all three ratio arms once each at a smaller, fixed training-set
-    size (n_total, default 5,000) instead of the canonical majority-pool-
-    sized budget — a single-seed exploratory pass asking whether the
-    ratio's effect on the subgroup AUC gap looks different when no arm has
-    "abundant" minority data. Canonical training seed=42 and canonical
-    split throughout — this checks a ratio x total-N interaction, not
-    training or split stochasticity, so it isn't a substitute for seed
-    replication or split sensitivity. Single seed only, non-gating,
-    exploratory. See CLAUDE.md, Study A Sample-Size Sensitivity.
+    """Trains all three ratio arms at a smaller, fixed training-set size
+    (n_total, default 5,000) instead of the canonical majority-pool-sized
+    budget — asking whether the ratio's effect on the subgroup AUC gap
+    looks different when no arm has "abundant" minority data. Canonical
+    undersampling seed=42 and canonical split throughout (via
+    train_one_arm's hardcoded seed=SEED undersampling draw) — this checks
+    a ratio x total-N interaction, not split sensitivity, so it isn't a
+    substitute for Split Sensitivity above.
+
+    seeds defaults to [SEED] (the original single-seed exploratory pass);
+    pass N_SENSITIVITY_REPLICATION_SEEDS for the 3-seed replication added
+    to check whether a single seed's N=5,000 gaps are reliable. Already-
+    written outputs are skipped as usual (train_one_arm's skip-if-exists),
+    so re-running with the replication seed list after the single-seed
+    pass only trains the two new seeds. Non-gating, exploratory — see
+    CLAUDE.md, Study A Sample-Size Sensitivity.
     """
-    predictions_by_arm = {}
+    if seeds is None:
+        seeds = [SEED]
+    predictions = {}
     for arm in ARMS:
-        output_path = os.path.join(N_SENSITIVITY_DIR, f"predictions_{arm}_N{n_total}.csv")
-        predictions_by_arm[arm] = train_one_arm(
-            arm, metadata, split_df, device, output_path,
-            run_seed=SEED, max_epochs=max_epochs, force=force,
-            run_name=f"N{n_total}", n_total=n_total,
-        )
-    return predictions_by_arm
+        for run_seed in seeds:
+            output_path = _n_sensitivity_output_path(arm, run_seed, n_total)
+            run_name = f"N{n_total}" if run_seed == SEED else f"N{n_total}_seed{run_seed}"
+            predictions[(arm, run_seed)] = train_one_arm(
+                arm, metadata, split_df, device, output_path,
+                run_seed=run_seed, max_epochs=max_epochs, force=force,
+                run_name=run_name, n_total=n_total,
+            )
+    return predictions
 
 
 def main():
@@ -349,6 +381,14 @@ def main():
              f"size (N_total={N_SENSITIVITY_TOTAL}) instead of the canonical budget — "
              "single-seed exploratory pass, see CLAUDE.md Study A Sample-Size Sensitivity",
     )
+    parser.add_argument(
+        "--n-sensitivity-replicate", action="store_true",
+        help="train all three ratio arms at N_total="
+             f"{N_SENSITIVITY_TOTAL} across the 3-seed replication pool "
+             f"({N_SENSITIVITY_REPLICATION_SEEDS}) instead of just the canonical seed — "
+             "already-written outputs (e.g. the canonical seed from --n-sensitivity) are "
+             "skipped, so this only trains the new replicate seeds",
+    )
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -362,6 +402,13 @@ def main():
         return
 
     split_df = dl.get_patient_split(metadata)
+
+    if args.n_sensitivity_replicate:
+        train_n_sensitivity(
+            metadata, split_df, device, max_epochs=args.max_epochs, force=args.force,
+            seeds=N_SENSITIVITY_REPLICATION_SEEDS,
+        )
+        return
 
     if args.n_sensitivity:
         train_n_sensitivity(metadata, split_df, device, max_epochs=args.max_epochs, force=args.force)
