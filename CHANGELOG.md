@@ -1,5 +1,74 @@
 # Changelog / Lab Notes
 
+## [Study B] 2026-08-19 (epsilon sweep results, reworked mechanism)
+- Ran the full epsilon sweep against Study A's frozen `predictions_90_10.csv`
+  test set (4,620 patients: 2,470 male, 2,150 female), using the reworked
+  `privatize_categorical_label` mechanism (per-record randomized response
+  — see CLAUDE.md's Subgroup Assignment Mechanism and the two `[Shared]`
+  entries above for why the original aggregate-count mechanism was
+  discarded and what replaced it). `src/run_study_b.py`, single
+  deterministic draw per epsilon (`BASE_SEED=42`).
+- **True gap** (recomputed from the frozen CSV as a sanity cross-check):
+  0.067036 — matches Study A's canonical 90/10 gap (0.0670) and this
+  study's own discarded-mechanism run, as expected (`load_frozen_test_set`
+  and `_subgroup_auc_gap` are unchanged; only subgroup assignment changed).
+- **Results** (`results/study_b/epsilon_sweep_results.csv`):
+
+  | epsilon | dp_gap | pct_diff | survived |
+  |---|---|---|---|
+  | 0.1 | 0.03549 | 47.1% | False |
+  | 0.5 | 0.05717 | 14.7% | True |
+  | 1.0 | 0.04665 | 30.4% | False |
+  | 2.0 | 0.09362 | 39.7% | False |
+  | 3.0 | 0.05957 | 11.1% | True |
+  | 4.0 | 0.06614 | 1.3% | True |
+  | 5.0 | 0.06721 | 0.3% | True |
+  | 6.0 | 0.06603 | 1.5% | True |
+  | 8.0 | 0.06629 | 1.1% | True |
+  | 10.0 | 0.06704 | 0.0% | True |
+
+- **Crossover epsilon: 3.0** — the smallest epsilon at/above which every
+  larger epsilon in the sweep also survives. Direction is correct at every
+  single epsilon tested, including 0.1 — randomized response's flip
+  probability never gets low enough in this sweep to reverse the sign, only
+  to distort magnitude.
+- **Non-monotonicity is real, not a bug.** epsilon=0.5 survived (14.7%) but
+  epsilon=1.0 and 2.0 didn't (30.4%, 39.7%) — consistent with the
+  development-time diagnostic (40 trials/epsilon), which found high
+  variance through exactly this range: only 4/40 trials survived at
+  epsilon=1, 13/40 at epsilon=0.5. A single draw landing outside the
+  "typical" pattern at these epsilons is expected, not evidence of an
+  error. This is a genuine improvement over the discarded mechanism's
+  behavior: that mechanism's "noise" was so structurally small relative to
+  cohort size that it produced an almost perfectly smooth, monotonic curve
+  regardless of epsilon — smooth because it wasn't really testing per-record
+  privacy protection at all (see the two `[Shared]` entries above). This
+  sweep's roughness is a sign the mechanism is doing what it's supposed to.
+- **Headline finding:** unlike the discarded mechanism, this one shows a
+  real, well-behaved crossover well inside commonly-cited real-world
+  epsilon values — the gap reliably survives at epsilon>=4-5, is
+  unreliable in the 0.5-3 range (sometimes survives, sometimes doesn't,
+  by chance), and is washed out in magnitude (though not direction) at
+  epsilon=0.1. This is a materially different, more defensible, and more
+  interesting result than the discarded mechanism produced, and it directly
+  supports (with real caveats about single-draw variance, see below) the
+  same qualitative policy point: DP-protected sex labels can preserve a
+  subgroup bias-audit conclusion at practical privacy budgets, but the
+  margin is narrower and noisier than the discarded mechanism made it look.
+- **Caveat:** single-draw-per-epsilon, same limitation flagged for the
+  discarded mechanism's sweep and not resolved here — CLAUDE.md's Study B
+  deliverable schema has no seed column (see Subgroup Assignment Mechanism,
+  "Not done" in the earlier design-decision entries). Given how much
+  variance the diagnostic showed in the 0.5-3 range specifically, the
+  crossover value (3.0) and the individual epsilon=0.5/1.0/2.0 results
+  should be read as one realization of a genuinely noisy process, not
+  stable per-epsilon facts — more so than for the discarded mechanism,
+  where the "noise" turned out to barely exist at all.
+- This is Study B's first real result under the corrected mechanism — not
+  yet oracle-gated or merge-ready; CLAUDE.md doesn't define a merge
+  criterion for Study B beyond "epsilon sweep complete, results logged in
+  CHANGELOG.md" (branch table), which this entry satisfies.
+
 ## [Shared] 2026-08-19 (re-derive EPSILON_SWEEP for privatize_categorical_label)
 - Diagnosed the epsilon range for the new mechanism before running the real
   sweep, same process as the discarded mechanism's extension: 40 trials per
