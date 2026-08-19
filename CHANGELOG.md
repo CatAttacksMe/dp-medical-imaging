@@ -1,5 +1,69 @@
 # Changelog / Lab Notes
 
+## [Shared] 2026-08-19 (fix diffprivlib/scikit-learn conflict; add src/dp_mechanisms.py)
+- **diffprivlib/scikit-learn fix.** Discovered while starting Study B that
+  `import diffprivlib` was completely broken against the `requirements.txt`
+  state merged from Study A: `ImportError: cannot import name 'DOUBLE' from
+  'sklearn.tree._tree'`. Cause: diffprivlib==0.6.6's top-level `__init__.py`
+  unconditionally imports its `models` submodule (DP-aware ML models,
+  unrelated to what this project needs), which imports private
+  (non-public) `sklearn.tree._tree` Cython symbols that scikit-learn
+  removed at some point after 1.4.x. diffprivlib declares
+  `scikit-learn>=1.4.0` with no upper bound, which doesn't reflect this —
+  it's a private-API break, not a declared incompatibility. Verified
+  `pip install scikit-learn==1.4.2` fixes the import (confirmed
+  `diffprivlib.mechanisms.Laplace` works and `sklearn.metrics.roc_auc_score`
+  still returns correct values) with no `pip check` conflicts. Pinned in
+  `requirements.txt` with an explanatory comment. Low risk to Study A/main's
+  frozen code, which only ever called `sklearn.metrics.roc_auc_score` — one
+  of scikit-learn's most stable APIs.
+- **New file `src/dp_mechanisms.py`** — the shared DP mechanism module
+  CLAUDE.md's Shared Infrastructure section already documented an interface
+  for but that, like `src/metrics.py` before the 2026-08-18 split-sensitivity
+  session, had never actually been written. Implements exactly the four
+  functions + constant CLAUDE.md names:
+  - `EPSILON_SWEEP = [0.1, 0.5, 1, 2, 5, 10]`.
+  - `privatize_categorical_counts` — Laplace mechanism, sensitivity=1 per
+    category. Categories are assumed to partition the population (e.g. a
+    sex breakdown of one fixed cohort), so each category's mechanism uses
+    the *full* epsilon under parallel composition, not `epsilon /
+    n_categories` — documented explicitly in the docstring since it's an
+    easy mistake to make (sequential composition would be the wrong model
+    here).
+  - `privatize_age_mean` — clips ages to `bounds` (public, fixed
+    transformation) before computing sensitivity `(hi-lo)/n` and applying
+    Laplace noise to the mean; cohort size `n` itself is treated as public.
+  - `privatize_age_histogram` — same parallel-composition argument as
+    categorical counts, applied per bin after clipping ages into range.
+  - `privatize_categorical_proportions` — counts privatized the same way,
+    divided by a `total` that defaults to `sum(counts.values())` and is
+    treated as public (not itself privatized) — a documented assumption
+    that matters for Study C, which frames the question as "a subgroup's
+    share of an already-known population size." Includes a closed-form
+    Laplace CI (`ci_lower`/`ci_upper`) derived from the mechanism's known
+    noise scale, not resampling — needed for Study C's
+    `results/study_c/detection_floor.csv` schema.
+- **New file `src/check_dp_mechanisms.py`** — 12 unit/invariant checks,
+  matching the precedent set by Study A's `check_pipeline_invariants.py`.
+  CLAUDE.md requires dp_mechanisms.py changes to pass its own unit tests
+  before either study branch pulls in a new version; this is that test
+  file. All 12 pass as of this entry.
+- **Bug caught by the coverage check, fixed before this entry.** The first
+  implementation of `privatize_categorical_proportions` rounded the noisy
+  count to an integer *before* computing the proportion, then built the CI
+  around that rounded value using a half-width derived for the continuous
+  (unrounded) Laplace distribution — a center/interval mismatch.
+  `proportions_ci_achieves_nominal_coverage` (3,000 trials, nominal 95%
+  confidence) measured ~91-92% empirical coverage instead of ~95%, well
+  outside the ±2% Monte Carlo tolerance, catching it immediately. Fixed by
+  computing `proportion` (and its CI) from the unrounded noisy value;
+  `noisy_count` stays a separately-rounded integer for display only, not
+  fed back into the CI. Re-ran after the fix: 95.0% coverage, 12/12 checks
+  pass. Recorded here as a concrete demonstration of why this file has its
+  own check script rather than only inline reasoning — the bug produced
+  plausible-looking output (valid-looking floats, no crash) and would not
+  have been caught without an empirical calibration check.
+
 ## [Study A] 2026-08-19 (pre-merge hardening: auxiliary-file guardrail + paper/ restructure)
 - **Auxiliary-file guardrail for Study B.** The upcoming merge of `study-a`
   into `main` brings in more than the two files Study B is allowed to read —
