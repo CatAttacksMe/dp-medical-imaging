@@ -1,5 +1,38 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-18 (pre-flight review fixes)
+- Findings from a pre-run readiness/reviewer pass, addressed before starting
+  the real training sweep:
+  - `src/metrics.py`: added the third robustness note CLAUDE.md's Test
+    oracle scope section calls for but that was never actually implemented
+    — `bootstrap_gap_ci` (patient-level, stratified by sex, 1,000
+    resamples, percentile CI on the 90/10 canonical gap). Dedicated
+    `BOOTSTRAP_SEED=1042`, distinct from the 42-46 training-seed pool and
+    the 101-103 split-seed pool. Non-gating, reported alongside the
+    existing cross-seed/cross-split spreads.
+  - `src/metrics.py`: added `check_oracle_direction` — automates the
+    direction half of the test oracle only (majority AUC > minority AUC).
+    The magnitude half ("within 2 AUC points of Larrazabal et al.'s
+    reported gap") is explicitly **not** automated: Larrazabal et al.
+    (2020) report Pneumothorax only as box plots (Fig. 1, panels B-2/C-2)
+    across female-training ratios 0/25/50/75/100%, with no 90/10 point and
+    no numeric table in the text or SI Appendix — hardcoding a number read
+    off that figure would be false precision the source doesn't support.
+    `main()` now exits 1 if the direction check fails; the magnitude
+    comparison stays a manual note against Figure 1.
+  - **New file** `src/check_pipeline_invariants.py` — a pre-flight
+    validation script (not part of CLAUDE.md's documented Study A file
+    layout, added deliberately as a reviewer-requested gate before
+    spending GPU-hours): checks image-file/metadata consistency, patient
+    sex consistency, split leakage, undersampling-budget invariants
+    (training patients ⊆ train split, fixed N_total across arms, achieved
+    vs. target sex ratios), val/test representativeness across arms, split
+    determinism, and `patient_level_auc`/`bootstrap_gap_ci` correctness on
+    synthetic examples. All 10 checks pass against the real repo data as of
+    this entry; negative-control spot checks confirm the assertions
+    actually fail when their invariant is violated (not tautological
+    passes). Run via `python src/check_pipeline_invariants.py`.
+
 ## [Study A] 2026-08-18 (split sensitivity)
 - Added a split-level counterpart to the existing cross-seed robustness
   note: reproduces the 90/10 gap on 3 additional patient-level 70/15/15
