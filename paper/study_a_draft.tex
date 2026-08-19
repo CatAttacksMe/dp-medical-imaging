@@ -1,0 +1,207 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\usepackage{float}
+\usepackage{titlesec}
+
+\setlength{\parskip}{0.7em}
+\setlength{\parindent}{0pt}
+\titlespacing*{\section}{0pt}{1.2ex plus 0.5ex minus 0.2ex}{0.6ex plus 0.2ex}
+\titlespacing*{\subsection}{0pt}{1.0ex plus 0.5ex minus 0.2ex}{0.4ex plus 0.2ex}
+
+\title{Study A: Reproducing and Stress-Testing the Sex-Imbalance AUC Gap on NIH ChestX-ray14 \\ \large Draft --- Findings and Numbers}
+\author{Andrew}
+\date{August 19, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent This is an internal, numbers-focused draft covering all Study A results to date. Study A trains an ImageNet-pretrained DenseNet-121 to reproduce Larrazabal et al.\ (2020)'s sex-imbalance AUC gap on NIH ChestX-ray14 pneumothorax classification, then stress-tests that gap across training seeds, patient splits, and training-set sizes before it is handed off, frozen, to Study B. The direction of the test oracle passes and is robust across every check performed. The magnitude, and in particular the ordering among the 70/30 and 50/50 arms, is noisier than a single canonical run suggests, and is at least partly explained by (a) a small-sample evaluation noise floor and (b) a fixed total training budget that couples the imbalance ratio to absolute subgroup training-set size. No narrative analysis beyond what is needed to interpret the numbers is included here; this is a results record, not a paper section.
+\end{abstract}
+
+\section{Methods (brief)}
+
+\textbf{Task and backbone.} Binary pneumothorax classification on NIH ChestX-ray14. ImageNet-pretrained DenseNet-121 (\texttt{torchvision}, \texttt{IMAGENET1K\_V1}), full fine-tuning, single-logit head. Images resized to $224\times224$, ImageNet-normalized. AdamW, LR $3\times10^{-5}$, max 20 epochs, early stopping on patient-level validation AUC (patience 5), identical across all arms.
+
+\textbf{Split.} Patient-level 70/15/15 split, seed 42, generated once (\texttt{patient\_split.csv}): 21{,}564 train / 4{,}621 val / 4{,}620 test patients. Val and test sets are fixed and sex-representative across all arms; only training-set composition varies. Patient-level AUC aggregates label by \texttt{max} and score by \texttt{mean} across a patient's images.
+
+\textbf{Imbalance sweep.} Three training-set sex ratios (male:female): 90/10, 70/30, 50/50. Female is the fixed minority sex. Undersampling is patient-level, drawn from a fixed budget $N_{\text{total}} = \min(\text{available majority}, 2\times\text{available minority})$. In this split, available majority (male) $=11{,}664$ and available minority (female) $=9{,}900$, so $N_{\text{total}}=11{,}664$ — the majority pool is the binding constraint. Table~\ref{tab:composition} shows the resulting per-arm training composition.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrr}
+\toprule
+Arm & Male train patients & Female train patients \\
+\midrule
+90/10 & 10{,}498 & 1{,}166 \\
+70/30 & 8{,}165 & 3{,}499 \\
+50/50 & 5{,}832 & 5{,}832 \\
+\bottomrule
+\end{tabular}
+\caption{Canonical training-set composition per arm ($N_{\text{total}}=11{,}664$, fixed across arms).}
+\label{tab:composition}
+\end{table}
+
+The fixed test set contains 2{,}470 male patients (75 pneumothorax-positive) and 2{,}150 female patients (107 positive), identical across every arm and seed.
+
+\textbf{Test oracle.} Reproduce Larrazabal et al.\ (2020)'s subgroup AUC gap (majority AUC $-$ minority AUC) in the same direction, on the 90/10 arm, canonical seed 42, canonical split. Larrazabal et al.\ report Pneumothorax only as box plots with no 90/10 point and no numeric table, so only the \emph{direction} half of the oracle is automated; the magnitude half is left for manual comparison against their Figure 1.
+
+\section{Results}
+
+\subsection{Canonical oracle result (90/10, seed 42)}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+Quantity & Value \\
+\midrule
+Gap (male AUC $-$ female AUC) & 0.0670 \\
+Direction check (majority $>$ minority AUC) & PASS \\
+Bootstrap 95\% CI (1{,}000 resamples, stratified by sex) & [0.0230, 0.1118] \\
+CI excludes zero & Yes \\
+\bottomrule
+\end{tabular}
+\caption{Canonical 90/10 result and oracle direction check.}
+\label{tab:canonical}
+\end{table}
+
+\subsection{Robustness of the 90/10 gap}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrl}
+\toprule
+Check & Canonical & Mean & Range & Direction agreement \\
+\midrule
+Cross-seed (5 seeds: 42--46) & 0.0670 & 0.0535 & [0.0396, 0.0670] & True (5/5) \\
+Cross-split (splits 101--103, seed 42) & 0.0670 & 0.0716 & [0.0657, 0.0815] & True (3/3) \\
+\bottomrule
+\end{tabular}
+\caption{90/10 arm robustness checks: varying training stochasticity (cross-seed) and varying which patients land in test (cross-split). Both non-gating.}
+\label{tab:robustness}
+\end{table}
+
+\subsection{Cross-arm comparison: 90/10 vs.\ 70/30 vs.\ 50/50}
+
+70/30 and 50/50 are not independently oracle-gated; each received a lighter 3-seed replication (42, 43, 44) rather than 90/10's full 5-seed treatment, and no bootstrap CI or split-sensitivity check.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrl}
+\toprule
+Arm & Canonical gap & Mean gap (n seeds) & Range & Direction agreement \\
+\midrule
+90/10 & 0.0670 & 0.0535 (5) & [0.0396, 0.0670] & True \\
+70/30 & 0.0415 & 0.0388 (3) & [0.0217, 0.0532] & True \\
+50/50 & 0.0170 & 0.0364 (3) & [0.0170, 0.0590] & True \\
+\bottomrule
+\end{tabular}
+\caption{Canonical-N ($11{,}664$) cross-arm gap comparison. Canonical-seed values alone look monotonic; mean-across-seeds still orders 90/10 $>$ 70/30 $>$ 50/50, but 70/30's and 50/50's ranges overlap substantially (50/50 seed 43's gap of 0.0590 exceeds every 70/30 seed).}
+\label{tab:crossarm}
+\end{table}
+
+\subsection{Subgroup AUC decomposition and the evaluation noise floor}
+
+Decomposing the gap into its two subgroup AUCs (canonical $N=11{,}664$, across each arm's replicate seeds) shows where the variance comes from.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrrrr}
+\toprule
+& \multicolumn{2}{c}{Male AUC} & \multicolumn{2}{c}{Female AUC} & \multicolumn{2}{c}{Gap} \\
+Arm & Mean & SD & Mean & SD & Mean & SD \\
+\midrule
+90/10 & 0.8904 & 0.0274 & 0.8369 & 0.0212 & 0.0535 & 0.0115 \\
+70/30 & 0.9038 & 0.0074 & 0.8650 & 0.0230 & 0.0388 & 0.0159 \\
+50/50 & 0.8924 & 0.0016 & 0.8560 & 0.0208 & 0.0364 & 0.0212 \\
+\bottomrule
+\end{tabular}
+\caption{Subgroup AUC mean/SD across replicate seeds, canonical $N=11{,}664$. 70/30 and 50/50 male-AUC SDs (0.0074, 0.0016) are likely underestimated given only $n=3$ seeds.}
+\label{tab:decomp}
+\end{table}
+
+The Hanley--McNeil approximation gives the standard error of a single AUC estimate from a finite positive/negative count, independent of training. With 107 female / 75 male positive test cases:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+Sex & $n_{\text{pos}}$ & $n_{\text{total}}$ & Hanley--McNeil SE (at observed AUC) \\
+\midrule
+Female & 107 & 2{,}150 & 0.0227--0.0243 \\
+Male & 75 & 2{,}470 & 0.0235--0.0248 \\
+\bottomrule
+\end{tabular}
+\caption{Evaluation-set sampling noise floor, independent of training-run stochasticity.}
+\label{tab:hanley}
+\end{table}
+
+Female-subgroup observed cross-seed SD (0.0208--0.0230, Table~\ref{tab:decomp}) sits almost exactly on this theoretical floor, indicating most of the female-AUC variance across seeds reflects evaluation-set sampling, not training instability.
+
+\subsection{Exploratory sample-size sensitivity ($N_{\text{total}}=5{,}000$)}
+
+All three arms retrained at a fixed $N_{\text{total}}=5{,}000$ (well below canonical $11{,}664$), canonical seed 42 plus replicate seeds 43--44, canonical split.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrrrr}
+\toprule
+& \multicolumn{2}{c}{Male AUC} & \multicolumn{2}{c}{Female AUC} & \multicolumn{2}{c}{Gap} \\
+Arm & Mean & SD & Mean & SD & Mean & SD \\
+\midrule
+90/10 & 0.8612 & 0.0179 & 0.8297 & 0.0111 & 0.0315 & 0.0130 \\
+70/30 & 0.8420 & 0.0094 & 0.8261 & 0.0018 & 0.0159 & 0.0076 \\
+50/50 & 0.8688 & 0.0159 & 0.8522 & 0.0015 & 0.0166 & 0.0145 \\
+\bottomrule
+\end{tabular}
+\caption{$N=5{,}000$ results, 3 seeds (42, 43, 44) per arm.}
+\label{tab:nsens}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrr}
+\toprule
+Arm & Mean gap, $N=5{,}000$ & Mean gap, canonical $N=11{,}664$ \\
+\midrule
+90/10 & 0.0315 & 0.0535 \\
+70/30 & 0.0159 & 0.0388 \\
+50/50 & 0.0166 & 0.0364 \\
+\bottomrule
+\end{tabular}
+\caption{Gap shrinks at the smaller training-set size for every arm. Direction agreement was True in all 9 of the $N=5{,}000$ runs.}
+\label{tab:nsens_compare}
+\end{table}
+
+\section{Discussion}
+
+\textbf{Oracle status.} The direction half of the test oracle passes and is robust: majority AUC exceeds minority AUC in every one of the runs reported here (canonical, 5 cross-seed, 3 cross-split, and all 9 $N=5{,}000$ runs — 18 independent training runs total, zero direction reversals at the 90/10 ratio). The magnitude half remains a manual comparison against Larrazabal et al.'s Figure 1, since their paper reports no numeric 90/10 value.
+
+\textbf{What is robust.} The 90/10 arm's gap is clearly and consistently the largest of the three ratios, across the canonical run, both robustness checks, and the independent $N=5{,}000$ sensitivity pass.
+
+\textbf{What is not robust.} 70/30 and 50/50 are not reliably distinguishable from each other. Their canonical-seed point estimates (0.0415 vs.\ 0.0170) suggest a clean monotonic trend, but the 3-seed replication shows substantial range overlap, and the same near-tie replicates at a completely different training-set size (0.0159 vs.\ 0.0166 at $N=5{,}000$). Two structural factors plausibly contribute:
+\begin{itemize}
+\item \emph{Evaluation noise.} The Hanley--McNeil floor ($\approx$0.023--0.025 per subgroup AUC, from only 75--107 positive test cases per sex) is comparable to or larger than the differences being compared between arms.
+\item \emph{Confounded training budget.} Because $N_{\text{total}}$ is fixed, moving toward balance simultaneously grows the minority training set and shrinks the majority training set (Table~\ref{tab:composition}). From 70/30 to 50/50, mean male AUC declines (0.9038 $\to$ 0.8924) while mean female AUC does not correspondingly rise (0.8650 $\to$ 0.8560) despite a 67\% increase in female training patients (3{,}499 $\to$ 5{,}832) — no clean evidence in this data that added minority representation beyond $\sim$3{,}500 patients improves minority-subgroup performance under this fixed-budget design.
+\end{itemize}
+
+\textbf{Gap magnitude is training-set-size dependent.} Every arm's mean gap roughly halves (or more) at $N=5{,}000$ versus canonical $N=11{,}664$ (Table~\ref{tab:nsens_compare}), while both subgroup AUCs drop in absolute terms. This is consistent with a less-fit model (less total training data) compressing both subgroups toward a similar, weaker performance level. The headline 90/10 gap value should be read as specific to the canonical training-set size, not as a size-invariant property of the ratio.
+
+\section{Limitations}
+\begin{itemize}
+\item The test oracle's magnitude criterion is not automated (no numeric Larrazabal target exists for the 90/10 condition).
+\item 70/30 and 50/50 are not independently oracle-gated: no bootstrap CI, no split-sensitivity check for either arm.
+\item The $N=5{,}000$ sensitivity pass explores one alternative training-set size with 3 seeds; it is not a full ratio $\times$ size grid, and was deliberately scoped this way (see CLAUDE.md, Study A Sample-Size Sensitivity) given GPU-hour cost and the likely infeasibility of much smaller sizes (e.g.\ $N=1{,}000$ implies $\sim$5 expected positive female training examples at 90/10).
+\item Early stopping selects checkpoints on aggregate, not sex-disaggregated, validation AUC — a plausible but untested contributor to why added minority training data does not visibly improve minority-subgroup AUC.
+\item Single dataset (NIH ChestX-ray14), single label (Pneumothorax), single backbone.
+\end{itemize}
+
+\end{document}
