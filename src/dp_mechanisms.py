@@ -48,7 +48,7 @@ import numpy as np
 # assuming this module still does.
 from diffprivlib.mechanisms import Binary, Laplace
 
-EPSILON_SWEEP = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]
+EPSILON_SWEEP = [0.1, 0.5, 1, 2, 3, 4, 5, 6, 8, 10]
 
 
 def _split_seeds(random_state, n):

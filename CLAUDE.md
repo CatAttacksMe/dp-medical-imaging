@@ -71,13 +71,18 @@ study branch pulls in a new version.
   purpose. Add/remove adjacency, same caveat as above.
 - `privatize_categorical_proportions(...)` — subgroup prevalence (Study C).
   Add/remove adjacency, same caveat as above.
-- `EPSILON_SWEEP = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]` — the
-  fixed sweep. Extended below 0.1 on 2026-08-19 after the original
-  0.1-10 range turned out to never wash out the 90/10 gap at all (see
-  CHANGELOG.md, `[Shared]` EPSILON_SWEEP extension) — the added low end
-  (0.001-0.05) is what actually brackets the crossover. If this changes,
-  update it here only; Study B references this constant rather than
-  hardcoding its own list.
+- `EPSILON_SWEEP = [0.1, 0.5, 1, 2, 3, 4, 5, 6, 8, 10]` — the fixed sweep.
+  Re-derived on 2026-08-19 after `privatize_categorical_label` replaced
+  the discarded aggregate-count mechanism (see Subgroup Assignment
+  Mechanism) — randomized response's noise profile is entirely different,
+  and the real transition (diagnosed empirically, 40 trials/epsilon) sits
+  at epsilon 3-4, comfortably inside the original 0.1-10 range this time;
+  points 3/4/6/8 were added around that transition for resolution, and the
+  low-epsilon extension from the discarded mechanism (0.001-0.05) was
+  dropped — at that noise level randomized response is already deep in
+  "washed out" territory (~90-115% pct_diff) with no useful
+  differentiation. If this changes, update it here only; Study B
+  references this constant rather than hardcoding its own list.
 
 ---
 
@@ -491,12 +496,11 @@ glob.
 
 - **Question:** does a DP-protected demographic label preserve the true
   subgroup AUC gap, or wash it out?
-- **Epsilon sweep:** fixed to `EPSILON_SWEEP` in `src/dp_mechanisms.py`.
-  Current value TBD after the 2026-08-19 rework (see Subgroup Assignment
-  Mechanism below) — the mechanism swap changes the noise profile
-  entirely, so the sweep needs re-diagnosing, not carried over from the
-  discarded design. No ad hoc epsilon values without updating that
-  constant once it's set.
+- **Epsilon sweep:** fixed to `EPSILON_SWEEP` in `src/dp_mechanisms.py` —
+  `{0.1, 0.5, 1, 2, 3, 4, 5, 6, 8, 10}`, re-derived on 2026-08-19 for
+  `privatize_categorical_label`'s noise profile (see Subgroup Assignment
+  Mechanism below). No ad hoc epsilon values without updating that
+  constant.
 - **Mechanism:** `privatize_categorical_label` (per-record randomized
   response, diffprivlib's `Binary` mechanism) applied independently to
   every test patient's sex label — not an aggregate Laplace release. See
@@ -557,14 +561,20 @@ glob.
   with no aggregate count involved, there's no cross-bin composition
   question and no dependence on which adjacency model applies to the rest
   of the cohort.
-- **Epsilon sweep will likely need re-deriving, not reused:** randomized
-  response's noise profile is entirely different from the discarded
-  aggregate-count mechanism's — at epsilon=1, ~27% of labels flip (vs.
-  ~1 patient out of 4,620 reassigned under the old mechanism at the same
-  epsilon). The `{0.001, ..., 10}` sweep extended for the old mechanism
-  should not be assumed correct for this one; re-run the same kind of
-  diagnostic (count/measure `pct_diff` across the range) before locking in
-  a final `EPSILON_SWEEP` value.
+- **Epsilon sweep re-derived, not reused:** randomized response's noise
+  profile is entirely different from the discarded aggregate-count
+  mechanism's — at epsilon=1, ~27% of labels flip (vs. ~1 patient out of
+  4,620 reassigned under the old mechanism at the same epsilon). A
+  diagnostic (40 trials/epsilon) found a clean transition: mean `pct_diff`
+  is ~0.3% at epsilon=8, ~3% at 5, ~8% at 4, crossing 15% around
+  epsilon=3-4 (23/40 trials survived at exactly 3), then climbing past 30%
+  by epsilon=2 and 50%+ by epsilon=1 — comfortably inside the *original*
+  0.1-10 range this time, unlike the discarded mechanism. `EPSILON_SWEEP`
+  updated to `{0.1, 0.5, 1, 2, 3, 4, 5, 6, 8, 10}` — kept the original six
+  for continuity, added 3/4/6/8 to resolve the transition, dropped the
+  discarded mechanism's low-epsilon extension (0.001-0.05) since
+  randomized response is already deep in "washed out" territory there
+  with no useful differentiation between points.
 
 ---
 

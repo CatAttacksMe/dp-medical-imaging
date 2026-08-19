@@ -1,5 +1,26 @@
 # Changelog / Lab Notes
 
+## [Shared] 2026-08-19 (re-derive EPSILON_SWEEP for privatize_categorical_label)
+- Diagnosed the epsilon range for the new mechanism before running the real
+  sweep, same process as the discarded mechanism's extension: 40 trials per
+  candidate epsilon, measuring mean `pct_diff` and direction-plus-15%
+  survival rate against Study A's frozen 90/10 test set.
+- **Result:** a much cleaner, better-behaved transition than the discarded
+  mechanism ever showed — mean `pct_diff` ~0.0% at epsilon=10, ~0.3% at 8,
+  ~3% at 5, ~8% at 4, crossing 15% right around epsilon=3-4 (23/40 trials
+  survived at epsilon=3, 36/40 at epsilon=4), then climbing to ~32% at
+  epsilon=2 and ~53% at epsilon=1. Sits comfortably inside the *original*
+  0.1-10 range — no low-epsilon extension needed this time, unlike the
+  discarded mechanism which never washed out anywhere in that range.
+- **Decision:** `EPSILON_SWEEP` set to `[0.1, 0.5, 1, 2, 3, 4, 5, 6, 8, 10]`
+  — kept the original six values for continuity with commonly-cited
+  real-world epsilon, added 3/4/6/8 to resolve the transition zone, and
+  dropped the discarded mechanism's 0.001-0.05 extension (randomized
+  response is already deep in "washed out" territory there, ~90-115%
+  `pct_diff`, no useful differentiation between points). Updated
+  `check_dp_mechanisms.py`'s exact-match assertion and CLAUDE.md's three
+  references. Re-ran `check_dp_mechanisms.py`: 16/16 still pass.
+
 ## [Shared] 2026-08-19 (add privatize_categorical_label; discard reassignment mechanism)
 - A technical review of Study B's first epsilon-sweep result (before it was
   pushed anywhere) found two disqualifying problems with the mechanism —
