@@ -1,5 +1,57 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-19 (N=5000 sample-size sensitivity, 3-seed replication)
+- Replicated the exploratory N=5,000 sample-size-sensitivity pass across
+  2 additional seeds (43, 44; canonical 42 unchanged) after the
+  single-seed result logged below showed a surprising, non-monotonic
+  pattern — one run wasn't enough to trust given the noise floor already
+  established elsewhere in this study. See CLAUDE.md, Study A
+  Sample-Size Sensitivity.
+- **Cross-seed gap spread per arm at N=5,000** (`src/metrics.py --note
+  n_sensitivity_seed`):
+  - 90/10: canonical=0.0179, other seeds=[0.0326, 0.0439], mean=0.0315,
+    range=[0.0179, 0.0439]
+  - 70/30: canonical=0.0073, other seeds=[0.0220, 0.0182], mean=0.0159,
+    range=[0.0073, 0.0220]
+  - 50/50: canonical=0.0188, other seeds=[0.0299, 0.0011], mean=0.0166,
+    range=[0.0011, 0.0299]
+  - Direction agreement is True in all 9 runs (majority AUC > minority
+    AUC every time).
+- **The gap-shrinks-at-smaller-N finding replicates — not a single-seed
+  fluke.** Mean gaps at N=5,000 (0.0315 / 0.0159 / 0.0166 for 90/10 /
+  70/30 / 50/50) are still substantially below their canonical-N
+  (11,664) counterparts (0.0535 / 0.0388 / 0.0364) for every arm,
+  confirming the direction reported in the single-seed entry below.
+- **The 70/30-vs-50/50 indistinguishability replicates across a very
+  different total-N regime.** At N=5,000, 70/30's mean gap (0.0159) and
+  50/50's (0.0166) are again nearly identical and each within the
+  other's seed-to-seed range — the same pattern already found at
+  canonical N (0.0388 vs. 0.0364). 90/10 remains clearly the largest gap
+  at both N levels. This is the most useful result of this pass:
+  "90/10 has the biggest gap; 70/30 and 50/50 are not reliably
+  distinguishable" now holds at two very different training-set sizes,
+  which is stronger support for that claim than either N level alone.
+- **Gap std at N=5,000 (0.0076-0.0145) is not obviously larger than at
+  canonical N (0.0115-0.0212)** — contrary to the naive expectation that
+  a smaller training set makes training noisier. Female-subgroup AUC std
+  specifically looks much smaller at N=5,000 (0.0015-0.0111) than at
+  canonical N (0.0208-0.0230, close to the ~0.023 Hanley-McNeil
+  evaluation-noise floor discussed in the seed-replication entries
+  below). With only 3 seeds per arm, this is most likely a small-sample
+  artifact in the std estimate itself — the same caveat already noted
+  for 70/30's/50/50's suspiciously low male-AUC std in the canonical
+  seed-replication entry — not evidence that N=5,000 training is
+  genuinely more stable. Not enough seeds to tell the difference either
+  way.
+- **Overall takeaway for the paper:** reported gap magnitudes are
+  training-set-size-dependent — all three arms' gaps roughly halve or
+  more at N=5,000 vs. N=11,664 — a real caveat on how the headline 90/10
+  gap value should be generalized. But the *relative* ordering across
+  ratios (90/10 distinctly worse; 70/30 and 50/50 statistically tied)
+  holds up across both training-set sizes tested. Per CLAUDE.md's Not in
+  scope note, no further N levels were run — this closes out the
+  sample-size-sensitivity investigation as scoped.
+
 ## [Study A] 2026-08-19 (sample-size sensitivity, exploratory)
 - Ran the exploratory sample-size-sensitivity pass added this session: all
   three ratio arms (90/10, 70/30, 50/50), each trained once at a fixed
