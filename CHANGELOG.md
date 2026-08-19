@@ -1,5 +1,38 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-19 (70/30 and 50/50 seed replication)
+- Ran the lighter 3-seed replication (42 canonical + 43-44) for 70/30 and
+  50/50 added in this entry's preceding commit, to check whether the
+  cross-arm trend (gap shrinking as training-set balance improves) holds
+  up beyond single-run point estimates. See CLAUDE.md, Study A Seed
+  Replication.
+- **Cross-seed gap spread per arm** (`src/metrics.py --note seed`):
+  - 90/10: canonical=0.0670, other seeds=[0.0396, 0.0599, 0.0437,
+    0.0574], mean=0.0535, range=[0.0396, 0.0670]
+  - 70/30: canonical=0.0415, other seeds=[0.0532, 0.0217], mean=0.0388,
+    range=[0.0217, 0.0532]
+  - 50/50: canonical=0.0170, other seeds=[0.0590, 0.0333], mean=0.0364,
+    range=[0.0170, 0.0590]
+  - Direction agreement is True within every arm (every seed in every
+    arm shows majority AUC > minority AUC — the gap's sign is robust).
+- **The cross-arm trend is directionally real but noisier than the
+  canonical-only numbers suggest.** Comparing canonical-seed values
+  alone (0.0670 → 0.0415 → 0.0170) looks like a clean monotonic story.
+  Comparing mean-across-seeds still preserves the ordering (0.0535 →
+  0.0388 → 0.0364), but 70/30's and 50/50's ranges overlap substantially
+  — 50/50 seed43's gap (0.0590) exceeds every 70/30 seed's gap, and even
+  approaches 90/10's minimum (0.0396). So: *90/10 has a clearly larger
+  gap than the other two arms*, but *70/30 vs. 50/50 individually is not
+  a robust ordering* — their single-run point estimates (0.0415 vs.
+  0.0170) overstate how separable those two arms actually are. If the
+  paper cites the three-arm trend, it should lean on the 90/10-vs-rest
+  contrast and the mean-gap ordering, not on the 70/30-vs-50/50 gap
+  specifically.
+- Not run for 70/30/50/50 (by design — see CLAUDE.md): bootstrap CI,
+  split-sensitivity. This replication is informational only, not
+  oracle-gating; the pass/fail criterion remains the single 90/10
+  seed=42 canonical-split run.
+
 ## [Study A] 2026-08-19 (full sweep results)
 - Ran the full sweep: 90/10 arm (canonical seed=42 + replication seeds
   43-46), 70/30 arm, 50/50 arm, and split-sensitivity (alternate splits
