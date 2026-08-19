@@ -1,5 +1,53 @@
 # Changelog / Lab Notes
 
+## [Study A] 2026-08-19 (sample-size sensitivity, exploratory)
+- Ran the exploratory sample-size-sensitivity pass added this session: all
+  three ratio arms (90/10, 70/30, 50/50), each trained once at a fixed
+  `N_total=5,000` (vs. the canonical 11,664), canonical seed=42, canonical
+  split. Motivated by the seed-replication finding above that 70/30 and
+  50/50's gaps are statistically indistinguishable at the canonical
+  budget — this checks whether the ratio's effect on the gap looks
+  different at a smaller training size, where no arm has "abundant"
+  minority data. See CLAUDE.md, Study A Sample-Size Sensitivity.
+- **Results** (`src/metrics.py --note n_sensitivity`):
+
+  | arm | male AUC | female AUC | gap (N=5,000) | gap (canonical N=11,664) |
+  |---|---|---|---|---|
+  | 90/10 | 0.8410 | 0.8231 | 0.0179 | 0.0670 |
+  | 70/30 | 0.8314 | 0.8241 | 0.0073 | 0.0415 |
+  | 50/50 | 0.8706 | 0.8518 | 0.0188 | 0.0170 |
+
+- **Every arm's gap shrinks substantially at N=5,000 relative to its
+  canonical value** — most sharply for 90/10 (0.0670→0.0179) and 70/30
+  (0.0415→0.0073); 50/50 is roughly unchanged (0.0170→0.0188). This is
+  the opposite of the "representation matters more under scarcity"
+  pattern the pass was designed to look for. Both subgroup AUCs are also
+  uniformly lower at N=5,000 than at the canonical budget (male:
+  0.83-0.87 vs ~0.89-0.92 canonical; female: 0.82-0.85 vs ~0.84-0.87
+  canonical), consistent with a less-fit model overall — from less
+  training data — compressing both subgroups toward a similar, weaker
+  performance level, which would mechanically shrink the gap regardless
+  of ratio.
+- **Cross-ratio ordering at N=5,000 is non-monotonic and inverted from
+  canonical:** 70/30 (0.0073) < 90/10 (0.0179) < 50/50 (0.0188) — 50/50
+  now shows the *largest* gap of the three, not the smallest. Per
+  CLAUDE.md's stated Limits for this pass, this is a single seed per arm
+  at a smaller (and likely noisier) training budget, on top of the same
+  fixed-test-set evaluation noise floor already implicated in the
+  seed-replication entries below (Hanley-McNeil SE ≈0.023-0.025 per
+  subgroup AUC, given only ~75-107 positive test cases per sex) — this
+  ordering should not be read as a robust finding, only as the reason
+  this pass was scoped exploratory rather than gating.
+- **Takeaway:** the one consistent signal across all three independently
+  trained arms is the gap shrinking at smaller N, not a clean ratio
+  effect emerging under data scarcity. Given the single-seed caveat, the
+  honest read is "training-set size affects the gap at least as much as
+  ratio does, in the opposite direction to what this pass hypothesized"
+  — worth flagging as a reason to caveat the ratio-sweep's external
+  validity in the paper, not as a citable finding on its own. Per
+  CLAUDE.md's Not in scope note, no further N levels or seed replication
+  were run as part of this addition.
+
 ## [Study A] 2026-08-19 (70/30 and 50/50 seed replication)
 - Ran the lighter 3-seed replication (42 canonical + 43-44) for 70/30 and
   50/50 added in this entry's preceding commit, to check whether the

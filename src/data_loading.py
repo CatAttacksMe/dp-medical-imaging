@@ -50,6 +50,13 @@ PATIENT_SPLIT_PATH = os.path.join(REPO_ROOT, "results", "study_a", "patient_spli
 SPLIT_SENSITIVITY_SEEDS = [101, 102, 103]
 SPLIT_SENSITIVITY_DIR = os.path.join(REPO_ROOT, "results", "study_a", "split_sensitivity")
 
+# Exploratory sample-size-sensitivity run: a single fixed N_total well below
+# the canonical majority-pool-sized budget, used to check whether the
+# ratio's effect on the subgroup gap looks different when no arm has
+# "abundant" minority data. See CLAUDE.md, Study A Sample-Size Sensitivity.
+N_SENSITIVITY_TOTAL = 5000
+N_SENSITIVITY_DIR = os.path.join(REPO_ROOT, "results", "study_a", "n_sensitivity")
+
 
 def load_metadata(csv_path=DEFAULT_METADATA_CSV):
     """Loads the NIH metadata CSV into the columns Study A needs."""
@@ -123,13 +130,18 @@ def _patient_sex(metadata):
     return metadata.drop_duplicates("patient_id").set_index("patient_id")["true_sex"]
 
 
-def build_training_set(metadata, split_df, ratio_name, seed=SEED):
+def build_training_set(metadata, split_df, ratio_name, seed=SEED, n_total=None):
     """Undersampled training-set images for one imbalance arm.
 
     Undersampling is patient-level (whole patients dropped, never
-    individual images) and drawn from a fixed budget shared across all
-    three arms: N_total = min(available_majority, 2 * available_minority),
-    so the arms are comparable and only composition varies.
+    individual images). By default, drawn from a fixed budget shared
+    across the three canonical arms: N_total = min(available_majority,
+    2 * available_minority), so the arms are comparable and only
+    composition varies. Passing an explicit n_total overrides this
+    budget — used only by the exploratory sample-size-sensitivity runs
+    (see CLAUDE.md, Study A Sample-Size Sensitivity), which check
+    whether the ratio's effect on the subgroup gap looks different at a
+    smaller, fixed training-set size than the canonical sweep's.
     """
     ratio = IMBALANCE_RATIOS[ratio_name]
     train_patients = split_df.loc[split_df["split"] == "train", "patient_id"]
@@ -138,10 +150,14 @@ def build_training_set(metadata, split_df, ratio_name, seed=SEED):
     majority_pool = sex_by_patient[sex_by_patient == MAJORITY_SEX].index.to_numpy()
     minority_pool = sex_by_patient[sex_by_patient == MINORITY_SEX].index.to_numpy()
 
-    n_total = min(len(majority_pool), 2 * len(minority_pool))
+    if n_total is None:
+        n_total = min(len(majority_pool), 2 * len(minority_pool))
     n_minority = int(round(n_total * ratio[MINORITY_SEX]))
     n_majority = n_total - n_minority
-    assert n_majority <= len(majority_pool) and n_minority <= len(minority_pool)
+    assert n_majority <= len(majority_pool) and n_minority <= len(minority_pool), (
+        f"n_total={n_total} infeasible for {ratio_name}: needs {n_majority} majority / "
+        f"{n_minority} minority patients, pools have {len(majority_pool)} / {len(minority_pool)}"
+    )
 
     rng = np.random.RandomState(seed)
     chosen = np.concatenate(

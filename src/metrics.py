@@ -149,6 +149,35 @@ def cross_split_gap_spread(canonical_gap, alternate_split_gaps):
     return _gap_spread(canonical_gap, alternate_split_gaps)
 
 
+def n_sensitivity_report(n_total=None):
+    """Exploratory sample-size-sensitivity note (CLAUDE.md, Study A
+    Sample-Size Sensitivity): male AUC, female AUC, and gap for all three
+    ratio arms at a smaller, fixed training-set size, alongside each arm's
+    canonical (full-budget) gap for reference. Single seed only — no CI,
+    no cross-seed/cross-split spread, no pass/fail criterion. Non-gating.
+    """
+    if n_total is None:
+        n_total = tr.N_SENSITIVITY_TOTAL
+    rows = []
+    for arm in tr.ARMS:
+        n_path = os.path.join(tr.N_SENSITIVITY_DIR, f"predictions_{arm}_N{n_total}.csv")
+        n_df = _load_predictions(n_path, "python train.py --n-sensitivity")
+        canonical_df = _load_predictions(
+            tr._output_path(arm, dl.SEED), f"python train.py --arm {arm}"
+        )
+        rows.append(
+            {
+                "arm": arm,
+                "n_total": n_total,
+                "male_auc": patient_level_auc(n_df[n_df["true_sex"] == dl.MAJORITY_SEX]),
+                "female_auc": patient_level_auc(n_df[n_df["true_sex"] == dl.MINORITY_SEX]),
+                "gap": subgroup_auc_gap(n_df),
+                "canonical_gap": subgroup_auc_gap(canonical_df),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def _load_predictions(path, run_hint):
     """Loads a predictions CSV, or raises with a pointer to the training
     command that produces it — a bare FileNotFoundError here wouldn't say
@@ -162,7 +191,7 @@ def _load_predictions(path, run_hint):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--note", choices=["seed", "split", "both"], default="both",
+        "--note", choices=["seed", "split", "both", "n_sensitivity"], default="both",
         help="which robustness note to compute",
     )
     args = parser.parse_args()
@@ -225,6 +254,11 @@ def main():
         ]
         result = cross_split_gap_spread(canonical_gap, alternate_gaps)
         print("cross-split gap spread:", result)
+
+    if args.note == "n_sensitivity":
+        result = n_sensitivity_report()
+        print("sample-size-sensitivity report (single seed, exploratory):")
+        print(result.to_string(index=False))
 
     if not direction_ok:
         sys.exit(1)

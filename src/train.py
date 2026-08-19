@@ -70,6 +70,13 @@ REPLICATION_DIR = os.path.join(RESULTS_DIR, "seed_replication")
 # train_split_sensitivity writes can never drift apart.
 SPLIT_SENSITIVITY_ARM = "90_10"
 SPLIT_SENSITIVITY_DIR = dl.SPLIT_SENSITIVITY_DIR
+# Exploratory sample-size-sensitivity run: all three ratio arms at a single
+# fixed N_total well below the canonical budget, single seed, canonical
+# split. See CLAUDE.md, Study A Sample-Size Sensitivity. Constant/dir
+# reused from data_loading.py for the same reason as SPLIT_SENSITIVITY_DIR
+# above.
+N_SENSITIVITY_TOTAL = dl.N_SENSITIVITY_TOTAL
+N_SENSITIVITY_DIR = dl.N_SENSITIVITY_DIR
 LOG_DIR = os.path.join(RESULTS_DIR, "logs")
 # .pth is gitignored by extension regardless of directory (see CLAUDE.md,
 # Conventions: checkpoints are never committed).
@@ -164,7 +171,7 @@ def _output_path(arm, run_seed):
 
 def train_one_arm(
     arm, metadata, split_df, device, output_path, run_seed=SEED, max_epochs=MAX_EPOCHS,
-    force=False, run_name=None,
+    force=False, run_name=None, n_total=None,
 ):
     """Trains one imbalance arm on the given split_df, writing to output_path.
 
@@ -178,6 +185,10 @@ def train_one_arm(
     messages, defaulting to seed{run_seed}; split-sensitivity callers pass
     a split-keyed run_name so their checkpoints/logs (which all share
     run_seed=SEED) don't collide with each other or with the canonical run.
+    n_total overrides the canonical majority-pool-sized training budget —
+    used only by train_n_sensitivity (see CLAUDE.md, Study A Sample-Size
+    Sensitivity); left None, behavior is unchanged from before this param
+    existed.
     """
     if run_name is None:
         run_name = f"seed{run_seed}"
@@ -195,7 +206,7 @@ def train_one_arm(
     # weight init/batch order, and split-sensitivity runs vary split_df
     # itself, not the undersampling draw within it — see CLAUDE.md, Seed
     # Replication / Split Sensitivity.
-    train_df = dl.build_training_set(metadata, split_df, arm, seed=SEED)
+    train_df = dl.build_training_set(metadata, split_df, arm, seed=SEED, n_total=n_total)
     val_df = dl.get_fixed_eval_set(metadata, split_df, "val")
     test_df = dl.get_fixed_eval_set(metadata, split_df, "test")
 
@@ -296,6 +307,30 @@ def train_split_sensitivity(metadata, device, max_epochs=MAX_EPOCHS, force=False
     return predictions_by_seed
 
 
+def train_n_sensitivity(
+    metadata, split_df, device, n_total=N_SENSITIVITY_TOTAL, max_epochs=MAX_EPOCHS, force=False,
+):
+    """Trains all three ratio arms once each at a smaller, fixed training-set
+    size (n_total, default 5,000) instead of the canonical majority-pool-
+    sized budget — a single-seed exploratory pass asking whether the
+    ratio's effect on the subgroup AUC gap looks different when no arm has
+    "abundant" minority data. Canonical training seed=42 and canonical
+    split throughout — this checks a ratio x total-N interaction, not
+    training or split stochasticity, so it isn't a substitute for seed
+    replication or split sensitivity. Single seed only, non-gating,
+    exploratory. See CLAUDE.md, Study A Sample-Size Sensitivity.
+    """
+    predictions_by_arm = {}
+    for arm in ARMS:
+        output_path = os.path.join(N_SENSITIVITY_DIR, f"predictions_{arm}_N{n_total}.csv")
+        predictions_by_arm[arm] = train_one_arm(
+            arm, metadata, split_df, device, output_path,
+            run_seed=SEED, max_epochs=max_epochs, force=force,
+            run_name=f"N{n_total}", n_total=n_total,
+        )
+    return predictions_by_arm
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--arm", choices=ARMS + ["all"], default="all")
@@ -307,6 +342,12 @@ def main():
         "--split-sensitivity", action="store_true",
         help="train the 90/10 arm against the 3 alternate split-sensitivity splits "
              "(seeds 101-103) instead of the normal --arm sweep",
+    )
+    parser.add_argument(
+        "--n-sensitivity", action="store_true",
+        help="train all three ratio arms once each at a smaller fixed training-set "
+             f"size (N_total={N_SENSITIVITY_TOTAL}) instead of the canonical budget — "
+             "single-seed exploratory pass, see CLAUDE.md Study A Sample-Size Sensitivity",
     )
     args = parser.parse_args()
 
@@ -321,6 +362,10 @@ def main():
         return
 
     split_df = dl.get_patient_split(metadata)
+
+    if args.n_sensitivity:
+        train_n_sensitivity(metadata, split_df, device, max_epochs=args.max_epochs, force=args.force)
+        return
 
     arms = ARMS if args.arm == "all" else [args.arm]
     for arm in arms:
