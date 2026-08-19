@@ -28,7 +28,7 @@ def check(fn):
 def epsilon_sweep_matches_spec():
     """CLAUDE.md fixes this exact sweep; Study B must reference it, not a
     hardcoded copy — so a silent edit here would silently change Study B."""
-    assert dp.EPSILON_SWEEP == [0.1, 0.5, 1, 2, 5, 10], dp.EPSILON_SWEEP
+    assert dp.EPSILON_SWEEP == [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10], dp.EPSILON_SWEEP
 
 
 @check

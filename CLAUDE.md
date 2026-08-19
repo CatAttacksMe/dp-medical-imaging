@@ -61,9 +61,13 @@ study branch pulls in a new version.
 - `privatize_categorical_counts(...)` — sex counts (Study B)
 - `privatize_age_mean(...)` / `privatize_age_histogram(...)` — age (Study B)
 - `privatize_categorical_proportions(...)` — subgroup prevalence (Study C)
-- `EPSILON_SWEEP = [0.1, 0.5, 1, 2, 5, 10]` — the fixed sweep. If this
-  changes, update it here only; Study B references this constant rather
-  than hardcoding its own list.
+- `EPSILON_SWEEP = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]` — the
+  fixed sweep. Extended below 0.1 on 2026-08-19 after the original
+  0.1-10 range turned out to never wash out the 90/10 gap at all (see
+  CHANGELOG.md, `[Shared]` EPSILON_SWEEP extension) — the added low end
+  (0.001-0.05) is what actually brackets the crossover. If this changes,
+  update it here only; Study B references this constant rather than
+  hardcoding its own list.
 
 ---
 
@@ -478,8 +482,9 @@ glob.
 - **Question:** does a DP-protected demographic label preserve the true
   subgroup AUC gap, or wash it out?
 - **Epsilon sweep:** fixed to `EPSILON_SWEEP` in `src/dp_mechanisms.py` —
-  `{0.1, 0.5, 1, 2, 5, 10}`. No ad hoc epsilon values without updating that
-  constant.
+  `{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10}` (extended below 0.1 on
+  2026-08-19 — see Subgroup Assignment Mechanism below for why). No ad hoc
+  epsilon values without updating that constant.
 - **Mechanism:** Laplace mechanism (diffprivlib), applied once per release.
   No repeated querying of the same privatized release — a future second
   query against the same data requires explicit composition accounting, not
@@ -487,12 +492,67 @@ glob.
 - **Test oracle:** at each epsilon, recompute the subgroup AUC gap using
   DP-protected sex labels to assign subgroups (`true_label` /
   `predicted_score` are unchanged from the frozen CSV — only the subgroup
-  assignment is noised). "Survives" = same direction + magnitude within 15%
-  of the true-demographic gap. "Washed out" = wrong direction or >15% off.
-  Record the crossover epsilon.
+  assignment is noised — see Subgroup Assignment Mechanism below for how).
+  "Survives" = same direction + magnitude within 15% of the
+  true-demographic gap. "Washed out" = wrong direction or >15% off. Record
+  the crossover epsilon.
 - **Deliverable:** `results/study_b/epsilon_sweep_results.csv` (`epsilon`,
   `true_gap`, `dp_gap`, `direction_match`, `pct_diff`, `survived`) + the
   crossover epsilon noted in CHANGELOG.md.
+
+### Study B — Subgroup Assignment Mechanism (finalized, 2026-08-19)
+
+- **Why this needed deciding:** `privatize_categorical_counts` (and every
+  other function in `src/dp_mechanisms.py`) privatizes *aggregate*
+  quantities, not per-record labels. Computing a subgroup AUC requires
+  knowing, for each patient, which group they're in — an aggregate DP
+  count alone doesn't say *which* patients are male vs. female. The
+  original "recompute the subgroup AUC gap using DP-protected sex labels
+  to assign subgroups" wording didn't specify the missing step: how an
+  aggregate count release becomes a per-patient assignment.
+- **Mechanism (`reassign_subgroups` in `src/run_study_b.py`):** release
+  DP-noised M/F counts once per epsilon via `privatize_categorical_counts`
+  (one Laplace draw pair, per "applied once per release" above).
+  Renormalize to a target majority-group size against the true, public
+  total N (the two categories' noise draws are independent, so they don't
+  sum to N on their own). Starting from the true group assignment,
+  randomly move just enough patients between groups (reproducible seed) so
+  the realized group sizes exactly match that target. Chosen over a
+  per-patient probabilistic flip (each patient independently reassigned
+  with probability equal to the DP-implied share) so realized group sizes
+  always match what was actually "released," matching a literal reading of
+  the Test oracle wording.
+- **Why `EPSILON_SWEEP` was extended below 0.1:** the first run against the
+  original `{0.1, 0.5, 1, 2, 5, 10}` sweep found the gap survived every
+  single epsilon, with `pct_diff` never exceeding 1.1% even at epsilon=0.1.
+  Diagnosed by counting how many of the 4,620 test patients actually get
+  reassigned per epsilon: 0 at epsilon=10, ~1 at epsilon=1, ~7 at
+  epsilon=0.1 — because the count-release mechanism's noise scale is
+  `1/epsilon`, which is trivial next to cohort counts in the thousands.
+  Extending the sweep down to epsilon=0.001 found the actual transition:
+  mean `pct_diff` across repeated trials was ~2.5% at epsilon=0.03, ~9% at
+  epsilon=0.01, ~14% at epsilon=0.005, and epsilon=0.001 could push an
+  entire subgroup to size 0 (handled explicitly — see below, not a crash).
+  The added points (0.001, 0.005, 0.01, 0.05) bracket this transition; the
+  original six points are kept for continuity with commonly-cited
+  real-world epsilon values, even though none of them wash out the gap
+  under this mechanism.
+- **Total subgroup erasure at very low epsilon:** at low enough epsilon,
+  `reassign_subgroups` can (rarely, depending on the noise draw) push an
+  entire subgroup's realized size to 0, making that epsilon's AUC
+  undefined. `run_study_b.py` reports this explicitly — `dp_gap` = NaN,
+  `direction_match` = `survived` = `False` — rather than crashing or
+  silently skipping the row; it's total erasure, not a subtler
+  washing-out, and is itself a meaningful outcome to record.
+- **Not done (would be a larger scope change, not decided here):**
+  seed-replicating individual epsilon points near the crossover. A
+  diagnostic multi-trial check during development showed real variance at
+  the transition (e.g. epsilon=0.01's `pct_diff` ranged 0.3%-39% across 15
+  trials) — CLAUDE.md's Study B deliverable schema is one row per epsilon
+  (no seed column), so the shipped sweep stays single-draw-per-epsilon,
+  matching that schema; the variance near the crossover is a caveat to
+  report in CHANGELOG.md alongside the results, not a reason to change the
+  deliverable's shape without a separate decision to do so.
 
 ---
 

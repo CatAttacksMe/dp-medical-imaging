@@ -1,5 +1,38 @@
 # Changelog / Lab Notes
 
+## [Shared] 2026-08-19 (extend EPSILON_SWEEP below 0.1)
+- While building `src/run_study_b.py`, the first run against the original
+  `EPSILON_SWEEP = [0.1, 0.5, 1, 2, 5, 10]` found the DP-protected 90/10
+  gap survived every single epsilon — `pct_diff` never exceeded 1.1%, even
+  at epsilon=0.1. Diagnosed by counting patients actually reassigned per
+  epsilon (out of 4,620 test patients): 0 at epsilon=10, ~1 at epsilon=1,
+  ~7 at epsilon=0.1 — the count-release mechanism's noise scale is
+  `1/epsilon`, trivial next to cohort counts in the thousands. See
+  CLAUDE.md's new "Study B — Subgroup Assignment Mechanism" section for
+  the full mechanism this diagnosed against.
+- A follow-up diagnostic sweep (15 trials each) found the actual
+  transition zone: mean `pct_diff` was ~0.8% at epsilon=0.1, ~2.5% at
+  0.03, ~9% at 0.01, ~14% at 0.005, crossing 15% somewhere around
+  0.003-0.005 — one to two orders of magnitude below the original sweep's
+  floor. At epsilon<=0.001, reassignment could push an entire subgroup to
+  size 0 (AUC undefined) rather than merely wash out the gap.
+- **Decision:** extended `EPSILON_SWEEP` in `src/dp_mechanisms.py` to
+  `[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]` — the four added
+  points bracket the observed transition; the original six are kept for
+  continuity with commonly-cited real-world epsilon values, even though
+  none of them wash out the gap under this mechanism. Updated
+  `check_dp_mechanisms.py`'s exact-match assertion and CLAUDE.md's two
+  references to the old six-value list. Re-ran `check_dp_mechanisms.py`:
+  12/12 still pass.
+- **Not done:** seed-replicating individual epsilon points near the
+  crossover, even though the diagnostic showed real variance there (e.g.
+  epsilon=0.01's `pct_diff` ranged 0.3%-39% across 15 trials in the
+  diagnostic). CLAUDE.md's Study B deliverable schema is one row per
+  epsilon with no seed column; changing that is a separate decision from
+  extending the sweep's range, not bundled into this one. The variance is
+  reported as a caveat alongside the actual sweep results, not smoothed
+  over by adding replication unasked.
+
 ## [Shared] 2026-08-19 (fix diffprivlib/scikit-learn conflict; add src/dp_mechanisms.py)
 - **diffprivlib/scikit-learn fix.** Discovered while starting Study B that
   `import diffprivlib` was completely broken against the `requirements.txt`
