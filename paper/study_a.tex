@@ -1,0 +1,184 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\usepackage{float}
+\usepackage{titlesec}
+
+\setlength{\parskip}{0.6em}
+\setlength{\parindent}{0pt}
+\titlespacing*{\section}{0pt}{1.2ex plus 0.5ex minus 0.2ex}{0.6ex plus 0.2ex}
+\titlespacing*{\subsection}{0pt}{1.0ex plus 0.5ex minus 0.2ex}{0.4ex plus 0.2ex}
+
+\title{Reproducing and Stress-Testing a Sex-Imbalance Subgroup AUC Gap\\ in Chest X-ray Pneumothorax Classification}
+\author{Andrew}
+\date{August 20, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Training-set demographic imbalance is known to induce subgroup performance disparities in medical image classifiers. This study reproduces that effect on NIH ChestX-ray14 pneumothorax classification and, more importantly, characterises how stable the reproduced disparity is --- because it is subsequently used as a fixed reference against which differentially private demographic releases are evaluated. An ImageNet-pretrained DenseNet-121 was fine-tuned at three training-set sex ratios (90/10, 70/30, 50/50 male:female) on a fixed, sex-representative patient-level test set. At 90/10 the majority--minority AUC gap is 0.0670 (male 0.9178, female 0.8508; bootstrap 95\% CI [0.0230, 0.1118]). The direction of the disparity is highly robust: majority AUC exceeded minority AUC in all 23 independent training runs performed, spanning three imbalance ratios, five training seeds, three alternative patient splits, and a reduced training-set-size condition. The magnitude is considerably less robust. It varies by a factor of 1.7 across training seeds alone (0.0396--0.0670), it roughly halves when total training size is reduced from 11,664 to 5,000 patients, and it is roughly 40--65\% of the values reported by Larrazabal et al.\ (2020) at the nearest comparable training compositions. We also find no evidence that minority training data beyond roughly 3,500 patients improves minority-subgroup AUC under a fixed total training budget. We conclude that the \emph{sign} of an imbalance-induced subgroup gap reproduces reliably, while its \emph{magnitude} should be treated as a configuration-specific quantity with an uncertainty comparable to the effect itself.
+\end{abstract}
+
+\section{Introduction}
+
+Classifiers trained on demographically imbalanced medical imaging datasets can perform measurably worse on underrepresented groups. Larrazabal et al.\ \cite{larrazabal2020} demonstrated this for sex imbalance on chest radiograph datasets, reporting subgroup AUC differences that scale with the degree of imbalance in the training set. Results of this kind are widely cited in fairness auditing and in policy discussion of demographic data collection, which makes their reproducibility --- and the stability of the numbers involved --- a question worth answering directly.
+
+This study has two purposes. The first is a straightforward reproduction: does a sex-imbalanced training set produce a majority-favouring subgroup AUC gap in pneumothorax classification on NIH ChestX-ray14 \cite{wang2017}? The second motivated the work. This gap serves as ground truth for a companion study asking whether a differentially private release of patient sex still supports the same bias-audit conclusion; that study scores private estimates against this one's gap using a \emph{relative} tolerance, so its results are only interpretable if the reference gap's own uncertainty is known. We therefore stress-test the gap along three axes a single training run cannot separate: training stochasticity (weight initialisation and batch ordering), evaluation-set composition (which patients land in the test split), and total training-set size.
+
+Our contributions are: a reproduction of the gap's direction that holds without exception across 23 independent training runs; a quantification of its magnitude uncertainty, which we find to be of the same order as the effect itself; a documented comparison against the magnitudes reported in \cite{larrazabal2020}, which this pipeline does not match; and evidence that a fixed total training budget confounds the imbalance ratio with absolute subgroup sample size.
+
+\section{Methods}
+
+\textbf{Data and split.} NIH ChestX-ray14 \cite{wang2017}, restricted to the binary pneumothorax label --- the pathology on which \cite{larrazabal2020} report their headline sex-gap result. Patients were partitioned once into a 70/15/15 train/validation/test split at the \emph{patient} level (21,564 / 4,621 / 4,620 patients), seed 42. Patient-level splitting is essential here: ChestX-ray14 contains multiple images per patient, and image-level splitting leaks patients across folds and invalidates any subgroup comparison. The split was generated once and reused for every run reported in Section~\ref{sec:results}, except where alternative splits are explicitly the variable under study.
+
+Validation and test sets are fixed and sex-representative across all conditions; only training-set composition varies. The test set contains 2,470 male patients (75 pneumothorax-positive) and 2,150 female patients (107 positive).
+
+\textbf{Imbalance sweep.} Three training-set sex ratios (male:female) were constructed: 90/10, 70/30, and 50/50, with female fixed as the minority group in all three, matching the scenario in \cite{larrazabal2020}. Imbalance was created by patient-level undersampling only --- no duplication and no ad hoc discarding --- from a total training budget fixed across all arms at $N_{\text{total}} = \min(\text{available majority}, 2\times\text{available minority})$. In this split the available male and female pools are 11,664 and 9,900 patients respectively, so $N_{\text{total}} = 11{,}664$ and the majority pool binds. Table~\ref{tab:composition} gives the resulting compositions. Holding $N_{\text{total}}$ fixed keeps total training volume constant across arms; Section~\ref{sec:discussion} discusses what this design choice costs.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrr}
+\toprule
+Arm & Male train patients & Female train patients \\
+\midrule
+90/10 & 10{,}498 & 1{,}166 \\
+70/30 & 8{,}165 & 3{,}499 \\
+50/50 & 5{,}832 & 5{,}832 \\
+\bottomrule
+\end{tabular}
+\caption{Training-set composition per arm ($N_{\text{total}}=11{,}664$, fixed across arms).}
+\label{tab:composition}
+\end{table}
+
+\textbf{Model and training.} DenseNet-121 \cite{huang2017} initialised from ImageNet \cite{deng2009} weights (\texttt{torchvision}, \texttt{IMAGENET1K\_V1}, pinned explicitly), fully fine-tuned with a single-logit head. ImageNet initialisation was chosen over a chest-X-ray-pretrained checkpoint deliberately: public chest-X-ray checkpoints are commonly pretrained on the same NIH corpus this study splits into train and test, which would leak test patients into pretraining. Images are resized to $224\times224$, replicated to three channels, and ImageNet-normalised. Training uses AdamW at learning rate $3\times10^{-5}$, class-balanced \texttt{pos\_weight} in \texttt{BCEWithLogitsLoss}, at most 20 epochs, and early stopping on patient-level validation AUC (patience 5). Hyperparameters, epoch budget, and seed are identical across arms; only training composition changes. Deterministic GPU kernels make runs bit-reproducible from the seed alone.
+
+\textbf{Evaluation.} Patient-level AUC, aggregating each patient's images by \texttt{max} over ground-truth labels and \texttt{mean} over predicted scores before ranking. The reported gap is majority (male) AUC minus minority (female) AUC. A 1,000-resample patient-level bootstrap, stratified by sex, gives a confidence interval on the 90/10 gap.
+
+\textbf{Robustness protocol.} The 90/10 arm --- the one compared against published results --- was replicated across five training seeds (42--46), varying only classifier-head initialisation and data-loader ordering; the patient split and the undersampled cohort are held at seed 42 throughout, so composition noise is not conflated with training noise. It was also retrained on three alternative patient-level 70/15/15 splits (seeds 101--103), each with its training cohort rebuilt by the same undersampling procedure. The 70/30 and 50/50 arms received a lighter three-seed replication (42--44). Finally, all three arms were retrained at a reduced fixed budget of $N_{\text{total}}=5{,}000$, three seeds each. This gives 23 training runs in total.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Reproduction of the subgroup gap}
+
+At the 90/10 ratio the model achieves a patient-level AUC of 0.9178 on male patients and 0.8508 on female patients, a gap of 0.0670 in the direction reported by \cite{larrazabal2020}. The stratified patient-level bootstrap gives a 95\% CI of [0.0230, 0.1118], which excludes zero: the disparity is statistically distinguishable from no difference, though the interval is wide.
+
+\subsection{Robustness of the 90/10 gap}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrl}
+\toprule
+Check & Reference run & Mean & Range & Direction agreement \\
+\midrule
+Training seeds (42--46) & 0.0670 & 0.0535 & [0.0396, 0.0670] & 5/5 \\
+Patient splits (101--103) & 0.0670 & 0.0731 & [0.0657, 0.0815] & 3/3 \\
+\bottomrule
+\end{tabular}
+\caption{90/10 gap under varying training stochasticity and varying test-set composition.}
+\label{tab:robustness}
+\end{table}
+
+Direction is preserved in every run. Magnitude is not stable: across training seeds alone the gap ranges from 0.0396 to 0.0670, a factor of 1.7, on identical data. The reference run's value of 0.0670 sits at the top of that range. Varying which patients land in the test set moves the gap less (0.0657--0.0815) but in the opposite direction, upward relative to the reference run.
+
+\subsection{Comparison across imbalance ratios}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrrrrr}
+\toprule
+& \multicolumn{2}{c}{Male AUC} & \multicolumn{2}{c}{Female AUC} & \multicolumn{3}{c}{Gap} \\
+Arm & Mean & SD & Mean & SD & Mean & Range & Dir. \\
+\midrule
+90/10 (5 seeds) & 0.8904 & 0.0274 & 0.8369 & 0.0212 & 0.0535 & [0.0396, 0.0670] & 5/5 \\
+70/30 (3 seeds) & 0.9038 & 0.0074 & 0.8650 & 0.0230 & 0.0388 & [0.0217, 0.0532] & 3/3 \\
+50/50 (3 seeds) & 0.8924 & 0.0016 & 0.8560 & 0.0208 & 0.0364 & [0.0170, 0.0590] & 3/3 \\
+\bottomrule
+\end{tabular}
+\caption{Subgroup AUC and gap by training ratio, across replicate seeds ($N_{\text{total}}=11{,}664$). The male-AUC standard deviations for the three-seed arms are likely underestimated at $n=3$.}
+\label{tab:crossarm}
+\end{table}
+
+Mean gaps order as expected --- 90/10 $>$ 70/30 $>$ 50/50 --- but the 70/30 and 50/50 ranges overlap substantially, and the largest 50/50 gap (0.0590) exceeds every 70/30 seed. Only the 90/10 arm is cleanly separated from the others.
+
+This overlap is consistent with an evaluation-set noise floor that is independent of training. Applying the Hanley--McNeil approximation \cite{hanley1982} to the observed subgroup AUCs on 107 female and 75 male positive test cases gives a sampling standard error of approximately 0.023--0.025 per subgroup AUC. The observed cross-seed standard deviations for female AUC (0.0208--0.0230, Table~\ref{tab:crossarm}) sit almost exactly on this floor, indicating that most of the subgroup-AUC variation across seeds reflects finite test-set sampling rather than training instability --- and that the differences being compared between the 70/30 and 50/50 arms are smaller than the noise on the quantities being compared.
+
+\subsection{Comparison against published magnitudes}
+\label{sec:magnitude}
+
+Larrazabal et al.\ report pneumothorax results as box plots over training compositions of 0, 25, 50, 75, and 100\% female, with no numeric table and no 90/10 (10\% female) point. The comparison below uses their Figure 1, panels B-2 and C-2 --- a single model trained at a mixed-sex ratio and evaluated separately on male and female test folds, which is the panel methodologically comparable to the design here. Values are a visual read of the box-plot mean markers rather than a pixel-calibrated digitisation, and carry roughly $\pm0.01$ uncertainty.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+\% female in training & Male AUC & Female AUC & Gap \\
+\midrule
+0\%  & $\approx$0.84  & $\approx$0.705 & $\approx$0.135 \\
+25\% & $\approx$0.835 & $\approx$0.735 & $\approx$0.10 \\
+10\% (linear interpolation) & --- & --- & $\approx$0.12 \\
+\bottomrule
+\end{tabular}
+\caption{Values read from \cite{larrazabal2020}, Fig.\ 1 (B-2/C-2, pneumothorax), at the grid points nearest this study's 10\%-female composition.}
+\label{tab:larrazabal}
+\end{table}
+
+This study's 90/10 gap is 0.0670 for the reference run and 0.0535 averaged over five seeds --- roughly 45--55\% of the interpolated comparison value in Table~\ref{tab:larrazabal} ($\approx$0.12), and 0.03--0.08 below either neighbouring grid point. Direction agrees; magnitude does not.
+
+Two structural features of the comparison should be noted before this is read as a failed replication. No 90/10 point exists on the published grid, so any comparison requires interpolation or a neighbouring-point proxy. And the two studies estimate the gap with different protocols: the published box plots aggregate 20 folds, whereas the spread reported here comes from five training seeds and three alternative splits on a single fixed architecture and hyperparameter configuration. These are related but not identical quantities, and the discrepancy is not resolved by this analysis. What this study does establish is a real, correctly signed, statistically significant subgroup gap in its own pipeline; it does not establish that the pipeline reproduces the published magnitude.
+
+\subsection{Effect of total training-set size}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrrrr}
+\toprule
+& \multicolumn{2}{c}{Male AUC} & \multicolumn{2}{c}{Female AUC} & \multicolumn{2}{c}{Mean gap} \\
+Arm & Mean & SD & Mean & SD & $N{=}5{,}000$ & $N{=}11{,}664$ \\
+\midrule
+90/10 & 0.8612 & 0.0179 & 0.8297 & 0.0111 & 0.0315 & 0.0535 \\
+70/30 & 0.8420 & 0.0094 & 0.8261 & 0.0018 & 0.0159 & 0.0388 \\
+50/50 & 0.8688 & 0.0159 & 0.8522 & 0.0015 & 0.0166 & 0.0364 \\
+\bottomrule
+\end{tabular}
+\caption{All three arms retrained at a fixed $N_{\text{total}}=5{,}000$, three seeds each, same split. Direction agreement was 9/9.}
+\label{tab:nsens}
+\end{table}
+
+Every arm's mean gap at least halves at the smaller training size, while both subgroup AUCs fall in absolute terms --- consistent with a less well-fit model compressing both subgroups toward a similar, weaker performance level. The 90/10 arm remains the largest-gap arm; the 70/30 and 50/50 arms remain indistinguishable from one another (0.0159 vs.\ 0.0166), reproducing the near-tie seen at the larger training size.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\textbf{Direction reproduces; magnitude is configuration-specific.} Majority AUC exceeded minority AUC in all 23 independent training runs reported here --- eleven at the 90/10 ratio (five training seeds, three alternative splits, three at reduced training size) and six at each of the 70/30 and 50/50 ratios --- with no reversals. This is a strong reproduction of the qualitative claim. The magnitude, however, moves by a factor of 1.7 under training stochasticity alone (Table~\ref{tab:robustness}), roughly halves under a change in training-set size (Table~\ref{tab:nsens}), and does not match published values at comparable compositions (Section~\ref{sec:magnitude}). Any downstream use of a single gap value should carry this uncertainty explicitly. In particular, the value 0.0670 used as a reference elsewhere in this project is the \emph{largest} of five seed estimates, not a central one.
+
+\textbf{A fixed training budget confounds ratio with subgroup size.} Because $N_{\text{total}}$ is held constant, moving toward balance simultaneously grows the minority training set and shrinks the majority one. The data show both effects. From 70/30 to 50/50, female training patients increase by 67\% (3,499 $\rightarrow$ 5,832) but mean female AUC does not rise (0.8650 $\rightarrow$ 0.8560), while mean male AUC declines as male training data is withdrawn (0.9038 $\rightarrow$ 0.8924). The gap narrows, but the narrowing is not attributable to improved minority performance. We find no evidence in this data that adding minority training data beyond roughly 3,500 patients improves minority-subgroup AUC --- an observation consistent either with a saturating minority learning curve or simply with the evaluation noise floor being too coarse to resolve the difference. Distinguishing these would require a design in which subgroup size and ratio are varied independently.
+
+\textbf{Implications for subgroup-fairness auditing.} A fairness audit reporting a single subgroup AUC gap from a single training run reports a quantity whose run-to-run uncertainty, at this test-set size, is comparable to the effect itself --- the sampling noise floor alone is 0.023--0.025 per subgroup AUC on 75--107 positive cases. Audits at this scale can support directional claims but should not be read as precise measurements of disparity magnitude.
+
+\section{Limitations}
+\begin{itemize}\itemsep0.2em
+\item The reproduced gap magnitude is 0.03--0.08 below the nearest published reference points (Section~\ref{sec:magnitude}). This is a genuine limitation of the reproduction and is not fully explained by the noise-floor and fixed-budget factors discussed above.
+\item The published values used for that comparison are a visual read of box-plot markers, not a calibrated digitisation, and carry $\pm0.01$ uncertainty in addition to the discrepancy itself.
+\item Only the 90/10 arm received the full robustness treatment. The 70/30 and 50/50 arms have three seeds each, no bootstrap interval, and no split-sensitivity check, so their mutual ordering is reported as unresolved rather than as a null result.
+\item The training-size sensitivity analysis covers one alternative size with three seeds; it is not a full size $\times$ ratio grid, and cannot separate the two factors.
+\item Early stopping selects checkpoints on aggregate rather than sex-disaggregated validation AUC. This is a plausible but untested contributor to why added minority training data does not visibly improve minority-subgroup AUC.
+\item Single dataset, single pathology label, single backbone architecture. Nothing here establishes that these magnitudes transfer to other datasets, labels, or model families.
+\end{itemize}
+
+\begin{thebibliography}{9}
+\bibitem{deng2009} Deng, J., Dong, W., Socher, R., Li, L.-J., Li, K., \& Fei-Fei, L. (2009). ImageNet: A large-scale hierarchical image database. \emph{CVPR}.
+\bibitem{hanley1982} Hanley, J. A., \& McNeil, B. J. (1982). The meaning and use of the area under a receiver operating characteristic (ROC) curve. \emph{Radiology}, 143(1), 29--36.
+\bibitem{huang2017} Huang, G., Liu, Z., van der Maaten, L., \& Weinberger, K. Q. (2017). Densely connected convolutional networks. \emph{CVPR}.
+\bibitem{larrazabal2020} Larrazabal, A. J., Nieto, N., Peterson, V., Milone, D. H., \& Ferrante, E. (2020). Gender imbalance in medical imaging datasets produces biased classifiers for computer-aided diagnosis. \emph{PNAS}, 117(23), 12592--12594.
+\bibitem{wang2017} Wang, X., Peng, Y., Lu, L., Lu, Z., Bagheri, M., \& Summers, R. M. (2017). ChestX-ray8: Hospital-scale chest X-ray database and benchmarks on weakly-supervised classification and localization of common thorax diseases. \emph{CVPR}.
+\end{thebibliography}
+
+\end{document}
