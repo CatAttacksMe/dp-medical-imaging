@@ -1,5 +1,69 @@
 # Changelog / Lab Notes
 
+## [Shared] 2026-08-20 (external-audience papers written for all three studies)
+- Added `paper/study_a.tex`, `paper/study_b.tex`, `paper/study_c.tex` —
+  one self-contained paper per study, written for an external reviewer
+  rather than as an internal results record. These are **new files**;
+  the internal `paper/study_drafts/*.tex` records are unchanged and
+  remain the authoritative numbers log.
+- Scope decision (agreed with Andy before writing): process history is
+  omitted — the discarded Study B aggregate-count mechanism, Study C's
+  rejected self-complement reference reading, and the mid-course
+  methodology fixes are not narrated. Caveats that a reviewer needs in
+  order to judge the numbers are kept: Study A's magnitude discrepancy
+  vs. Larrazabal, Study B's low-epsilon direction unreliability and
+  most-favourable-reference caveat, Study C's clipping conservatism and
+  detection-threshold sensitivity.
+- Study B's debiased-estimator negative result is retained as one short
+  Discussion paragraph (no table) rather than a full section — it
+  pre-empts the obvious "did you try post-hoc correction?" review
+  question at low cost. Study C's primary `EPSILON_SWEEP` sweep is
+  reported compactly as an upper-bound result (49/50 cells at 100%
+  detection) with the fine-grid floor as the headline, without the
+  range-selection narrative.
+- Format: 11pt single-column article, same preamble as the drafts,
+  ~5 pages each, manual `thebibliography` (no .bib dependency).
+- **Not compiled.** No LaTeX toolchain is installed in this environment
+  (`pdflatex`, `latexmk`, `tectonic` all absent), so the files are
+  delivered unverified against a real build. Structural checks done in
+  lieu: environment/brace balance, tabular column counts, and
+  `\ref`/`\cite` resolution against declared labels and bibitems — all
+  clean. Page counts are estimates, not measured.
+- All headline numbers were re-derived from the committed result CSVs
+  rather than copied from the drafts (see the two entries below for what
+  that turned up).
+
+## [Study A] 2026-08-20 (two reporting discrepancies found in `study_a_draft.tex` — noted, not fixed)
+- Found while re-deriving numbers for `paper/study_a.tex`; left in place
+  per CLAUDE.md's "don't edit another study's owned files in passing"
+  rule. Neither changes any Study A conclusion.
+- **Run count understated.** The draft's Discussion says "18 independent
+  training runs total, zero direction reversals." Recomputing the
+  subgroup gap from every committed predictions CSV gives **23** runs —
+  11 at 90/10 (5 training seeds, 3 alternate splits, 3 at N=5,000), 6 at
+  70/30 and 6 at 50/50 (3 canonical-N + 3 at N=5,000 each). Direction
+  agreement is 23/23, so the claim strengthens rather than weakens.
+  `paper/study_a.tex` reports 23.
+- **Cross-split mean averages a different set than its stated range.**
+  The draft's robustness table reports cross-split mean 0.0716 with
+  range [0.0657, 0.0815]. The mean is over 4 values (the 3 alternate
+  splits *plus* the canonical split); the range is over the 3 alternates
+  only. Mean of the 3 alternates alone is 0.0731. `paper/study_a.tex`
+  reports 0.0731 so that the mean and range describe the same set.
+
+## [Study B] 2026-08-20 (stale direction-agreement figure in `study_b_draft.tex` prose — noted, not fixed)
+- The draft's Discussion prose says direction agreement is "66--90\%
+  through epsilon=1--2"; CLAUDE.md's Study B — Seed Replication section
+  likewise says "66% at 1.0". Recomputing from
+  `results/study_b/seed_replication/dp_gap_replication.csv` gives
+  **90.0%** at epsilon=1.0 and 96.7% at epsilon=2.0. The draft's own
+  replication *table* already reports 90.0% correctly — only the prose
+  summary and the CLAUDE.md note carry the stale 66% figure.
+- `paper/study_b.tex` uses the CSV-derived values throughout (70.0% at
+  0.1, 73.3% at 0.5, 90.0% at 1.0, 96.7% at 2.0, 100% at epsilon>=3).
+  The qualitative claim — direction is unreliable at low epsilon — is
+  unaffected; the epsilon=1 case is less severe than the prose implied.
+
 ## [Study C] 2026-08-20 (results review: fixed 3 methodology gaps found by re-checking the initial pass)
 - A results review (before writing `study_c_draft.tex`) re-verified the
   initial implementation's own claims rather than just re-reading the
