@@ -706,6 +706,6 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
     │                                     # combine the original policy paper with the studies' findings
     └── study_drafts/                     # internal, numbers-focused per-study records (not paper prose)
         ├── study_a_draft.tex
-        ├── study_b_draft.tex             # created once Study B has results to record
+        ├── study_b_draft.tex
         └── study_c_draft.tex             # created once Study C has results to record
 ```

@@ -1,5 +1,26 @@
 # Changelog / Lab Notes
 
+## [Study B] 2026-08-19 (add draft findings write-up, paper/study_drafts/study_b_draft.tex)
+- Wrote `paper/study_drafts/study_b_draft.tex`, mirroring Study A's draft
+  format/tone (internal, numbers-focused results record, not paper prose):
+  abstract, brief methods, the discarded-mechanism history (kept short —
+  full account stays in CLAUDE.md and the two `[Shared]` CHANGELOG entries
+  above, not duplicated here), the canonical single-draw sweep table, the
+  30-seed replication table, a discussion section stating plainly that the
+  replication changed the headline (direction unreliable at low epsilon,
+  epsilon=4/5 only 90% reliable despite looking stable in the canonical
+  draw), and a limitations section covering scope (90/10 arm only), the
+  unvalidated 15% threshold, the missing analytical epsilon-to-attenuation
+  relationship, and finite-replicate sampling uncertainty on the reported
+  survival rates themselves.
+- Updated CLAUDE.md's File Layout tree — `study_b_draft.tex` no longer
+  listed as "created once Study B has results to record," since it now
+  exists.
+- No pdflatex/latexmk available in this environment to compile-check;
+  verified `\begin`/`\end` environment balance and no unescaped `%`
+  programmatically, and all `\geq`/`\leq` usages confirmed wrapped in math
+  mode by inspection.
+
 ## [Study B] 2026-08-19 (seed replication; all-one-class guard fix)
 - A second technical review (post-mechanism-rework) flagged two issues,
   both addressed here — see CLAUDE.md's new "Study B — Seed Replication"
