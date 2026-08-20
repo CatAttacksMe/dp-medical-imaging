@@ -1,0 +1,186 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\usepackage{float}
+\usepackage{titlesec}
+
+\setlength{\parskip}{0.7em}
+\setlength{\parindent}{0pt}
+\titlespacing*{\section}{0pt}{1.2ex plus 0.5ex minus 0.2ex}{0.6ex plus 0.2ex}
+\titlespacing*{\subsection}{0pt}{1.0ex plus 0.5ex minus 0.2ex}{0.4ex plus 0.2ex}
+
+\title{Study C: How Small a Subgroup Can DP Still Detect as Underrepresented? \\ \large Draft --- Findings and Numbers}
+\author{Andrew}
+\date{August 20, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent This is an internal, numbers-focused draft covering all Study C results to date. Study C asks the ``objection response'' question: how small can a subgroup's true prevalence be before DP noise makes its underrepresentation, relative to a known reference proportion, statistically undetectable? Fully synthetic, no dependency on Study A/B data. The reference-group concept in the original design was ambiguous and, on one reading, broken --- Section~\ref{sec:reference-design} covers why a self-complement reading (subgroup vs.\ everyone else in one cohort) was rejected before implementation in favor of a fixed, public, non-privatized reference proportion, and why the detection test is a one-sample CI-vs-known-constant check rather than a two-CI difference test. The primary sweep (Section~\ref{sec:primary}), run on the shared \texttt{EPSILON\_SWEEP} for cross-study comparability, came back almost entirely saturated at 100\% detection --- not because DP preserves detectability everywhere, but because that sweep's epsilon floor (0.1) and the tested gap sizes both undershot this mechanism's real transition, the same shape of range-selection problem Study B's original epsilon sweep had. A dedicated fine-grained sweep (Section~\ref{sec:floor}) locates the actual floor: full washout at epsilon $\leq$0.01 regardless of gap size, and a smoothly shrinking detectable gap from there up to near single-patient resolution at epsilon=1. A results review after the initial pass found and fixed three further gaps --- an unvalidated low-epsilon coverage regime, a missing null-condition control on the fine grid, and a weak, boundary-sensitive detection threshold (Section~\ref{sec:discussion}) --- none of which overturn the qualitative finding, but all of which affect how precisely the exact numbers should be read.
+\end{abstract}
+
+\section{Methods (brief)}
+
+\textbf{Setup.} A synthetic cohort of \texttt{REFERENCE\_TOTAL}=4{,}620 patients (matching Study B's frozen test-cohort size, so the two studies' epsilon axes are comparable at the same real-world scale). A subgroup's true prevalence is swept; its count is privatized via \texttt{privatize\_categorical\_proportions} (\texttt{src/dp\_mechanisms.py}), called with a single category and an explicit \texttt{total} --- the same ``cohort size is public, only the statistic is privatized'' convention as \texttt{privatize\_age\_mean}. Add/remove adjacency, matching that function's own assumption: Study C asks how many members of a subgroup exist in the cohort, a membership question, not what a known individual's attribute is (Study B's question, which needed a different mechanism and adjacency model entirely).
+
+\textbf{Detection criterion.} A one-sample test: does the subgroup's own closed-form 95\% CI exclude a known, fixed \texttt{REFERENCE\_PROPORTION}=0.05? ``Detected'' = CI does not contain 0.05. This is a standard, correctly-calibrated interval-containment check --- see Section~\ref{sec:reference-design} for why an earlier design needed (and then didn't need) a more complex two-CI construction.
+
+\textbf{Replication.} 30 independent draws per (epsilon, true\_prevalence) cell, own seed pool, Wilson 95\% CI on the resulting detection rate --- same rationale and construction as Study B's seed replication: a single stochastic draw at a borderline epsilon can't distinguish ``reliably detects'' from ``happened to.''
+
+\textbf{False-positive control.} The \texttt{true\_prevalence == REFERENCE\_PROPORTION} cell (no real gap) reports the rate at which the test still, incorrectly, excludes the reference proportion --- a Type-I-error baseline for interpreting every other cell's detection rate against.
+
+\section{Results}
+
+\subsection{Reference-group design: a rejected first reading}
+\label{sec:reference-design}
+
+The original spec described testing subgroup prevalence ``against a larger synthetic reference group,'' without saying what that reference group was. Before any code was written, this was resolved as follows.
+
+\textbf{Rejected: self-complement partition.} Reading ``reference group'' as the subgroup's complement within one cohort (subgroup vs.\ everyone else, e.g.\ 2\% vs.\ 98\%) was considered and rejected. At that separation, a difference-of-proportions test would report ``detected'' at almost any epsilon --- the two categories are so far apart by construction that the test would confirm nothing except that the subgroup is a minority, which is true by definition and not the thing the study is supposed to measure.
+
+\textbf{Adopted: fixed external reference proportion.} \texttt{REFERENCE\_PROPORTION}=0.05 is a fixed, public constant, not drawn from the same cohort and not itself privatized --- representing an external ``expected/unbiased'' share (e.g.\ a known population-level figure). Only the audited cohort's own subgroup count is sensitive. \texttt{true\_prevalence}, swept 0.5\%--5\%, is the audited cohort's actual composition; values below 5\% simulate varying degrees of real underrepresentation, and \texttt{true\_prevalence}=5\% doubles as the false-positive control cell rather than needing a separate run.
+
+This also simplified the detection criterion. An intermediate design (before the reference was fixed as a known constant) called for a CI on the \emph{difference} of two independently-privatized proportions, which would have needed combining two noise scales and was vulnerable to a separate, well-known error --- checking whether two independent CIs merely \emph{overlap} is not equivalent to a proper difference test (roughly equivalent to testing at $\alpha\approx0.006$ instead of the nominal 0.05). With the reference as a known constant, no such construction is needed: a plain one-sample interval-containment check is already correctly calibrated.
+
+\subsection{Primary sweep}
+\label{sec:primary}
+
+0.5\%--5\% true prevalence $\times$ the shared \texttt{EPSILON\_SWEEP} (0.1--10), 30 replicates/cell.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{r*{10}{r}}
+\toprule
+True prev. & 0.1 & 0.5 & 1.0 & 2.0 & 3.0 & 4.0 & 5.0 & 6.0 & 8.0 & 10.0 \\
+\midrule
+0.5\%  & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% \\
+1.0\%  & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% \\
+2.0\%  & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% \\
+3.0\%  & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% \\
+4.0\%  & 86.7\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% \\
+\bottomrule
+\end{tabular}
+\caption{Primary sweep detection rate (30 replicates/cell), true prevalence $\times$ epsilon. Only one cell (4.0\%, epsilon=0.1) shows any degradation from 100\%.}
+\label{tab:primary}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrr}
+\toprule
+Epsilon & False-positive rate & 95\% CI (Wilson) \\
+\midrule
+0.1  & 3.3\%  & [0.6, 16.7] \\
+0.5  & 3.3\%  & [0.6, 16.7] \\
+1.0  & 3.3\%  & [0.6, 16.7] \\
+2.0  & 0.0\%  & [0.0, 11.4] \\
+3.0  & 3.3\%  & [0.6, 16.7] \\
+4.0  & 10.0\% & [3.5, 25.6] \\
+5.0  & 13.3\% & [5.3, 29.7] \\
+6.0  & 6.7\%  & [1.8, 21.3] \\
+8.0  & 0.0\%  & [0.0, 11.4] \\
+10.0 & 0.0\%  & [0.0, 11.4] \\
+\bottomrule
+\end{tabular}
+\caption{Null-condition (true\_prevalence = REFERENCE\_PROPORTION = 5\%) false-positive rate by epsilon. Consistent with the nominal 5\% Type-I rate throughout (all CIs contain 5\%) --- the test is calibrated as expected in this range.}
+\label{tab:primary-null}
+\end{table}
+
+Read on its own, Table~\ref{tab:primary} looks like a clean, uninteresting result: DP preserves detectability of prevalence gaps this size across essentially the entire tested epsilon range. Section~\ref{sec:floor} shows this reading is a range-selection artifact, not evidence that detectability holds everywhere.
+
+\subsection{Fine-grained floor localization}
+\label{sec:floor}
+
+A 60-trial/cell diagnostic (reported in CLAUDE.md, not reproduced here) located the real transition well below \texttt{EPSILON\_SWEEP}'s 0.1 floor and at gaps under 1 percentage point from the reference --- the same shape of problem Study B's \emph{original} epsilon sweep had before being re-derived for its own mechanism. Rather than redefining \texttt{EPSILON\_SWEEP} itself (which stays fixed for cross-study comparability), a dedicated finer grid was added: \texttt{FLOOR\_EPSILONS} = \{0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0\}, \texttt{FLOOR\_PREVALENCES} = \{0.5\%, 1\%, 2\%, 3\%, 3.5\%, 4\%, 4.2\%, 4.5\%, 4.8\%, 4.9\%, 5\%\} (the last value doubling as this grid's own null-condition control), 30 replicates/cell, own seed pool.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{r*{8}{r}}
+\toprule
+True prev. & 0.005 & 0.01 & 0.02 & 0.05 & 0.1 & 0.2 & 0.5 & 1.0 \\
+\midrule
+0.5\%  & 0.0\%  & 0.0\%  & 83.3\% & 100\%  & 100\%  & 100\%  & 100\%  & 100\% \\
+1.0\%  & 0.0\%  & 0.0\%  & 63.3\% & 100\%  & 100\%  & 100\%  & 100\%  & 100\% \\
+2.0\%  & 3.3\%  & 0.0\%  & 30.0\% & 100\%  & 100\%  & 100\%  & 100\%  & 100\% \\
+3.0\%  & 0.0\%  & 0.0\%  & 16.7\% & 86.7\% & 100\%  & 100\%  & 100\%  & 100\% \\
+3.5\%  & 0.0\%  & 0.0\%  & 10.0\% & 86.7\% & 100\%  & 100\%  & 100\%  & 100\% \\
+4.0\%  & 3.3\%  & 0.0\%  & 0.0\%  & 20.0\% & 93.3\% & 100\%  & 100\%  & 100\% \\
+4.2\%  & 3.3\%  & 0.0\%  & 6.7\%  & 23.3\% & 86.7\% & 100\%  & 100\%  & 100\% \\
+4.5\%  & 6.7\%  & 3.3\%  & 0.0\%  & 13.3\% & 30.0\% & 90.0\% & 100\%  & 100\% \\
+4.8\%  & 3.3\%  & 0.0\%  & 3.3\%  & 0.0\%  & 3.3\%  & 20.0\% & 93.3\% & 100\% \\
+4.9\%  & 6.7\%  & 3.3\%  & 10.0\% & 6.7\%  & 6.7\%  & 0.0\%  & 36.7\% & 86.7\% \\
+5.0\%$^{*}$ & 3.3\% & 0.0\% & 0.0\% & 3.3\% & 10.0\% & 3.3\% & 3.3\% & 3.3\% \\
+\bottomrule
+\end{tabular}
+\caption{Fine-grid detection rate (30 replicates/cell), true prevalence $\times$ epsilon. Row marked $^{*}$ is the null-condition control (true\_prevalence = REFERENCE\_PROPORTION); its own false-positive rate stays 0--10\% across this grid's full epsilon range, confirming the washout below is not an artifact of comparing against the coarser primary sweep's baseline.}
+\label{tab:floor}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrr}
+\toprule
+Epsilon & Boundary prev.\ (threshold=0.5) & Boundary prev.\ (threshold=0.8) \\
+\midrule
+0.005 & --- (no gap detected)   & --- (no gap detected) \\
+0.01  & --- (no gap detected)   & --- (no gap detected) \\
+0.02  & 1.0\% (4.0-pt gap)      & 0.5\% (4.5-pt gap) \\
+0.05  & 3.5\% (1.5-pt gap)      & 3.5\% (1.5-pt gap) \\
+0.1   & 4.2\% (0.8-pt gap)      & 4.2\% (0.8-pt gap) \\
+0.2   & 4.5\% (0.5-pt gap)      & 4.5\% (0.5-pt gap) \\
+0.5   & 4.8\% (0.2-pt gap)      & 4.8\% (0.2-pt gap) \\
+1.0   & 4.9\% (0.1-pt gap)      & 4.9\% (0.1-pt gap) \\
+\bottomrule
+\end{tabular}
+\caption{Smallest true\_prevalence (equivalently, smallest gap from the 5\% reference) with detection rate at/above threshold, for every larger gap too (monotonic-window definition, mirroring Study B's \texttt{crossover\_epsilon}). Only epsilon=0.02 is threshold-sensitive within the tested grid --- see Section~\ref{sec:discussion}.}
+\label{tab:floor-boundary}
+\end{table}
+
+This is a clean, monotonic curve: total washout at epsilon $\leq$0.01 regardless of gap size (even the widest tested gap, 4.5 points, is not reliably detected), then steadily finer resolution up to epsilon=1.0, where even a 0.1-percentage-point gap is detected 86.7\% of the time on a $\sim$4,620-patient cohort. This --- not Table~\ref{tab:primary}'s near-total saturation --- is the study's actual headline finding.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\textbf{What is robust.} The floor curve (Table~\ref{tab:floor-boundary}) is monotonic and well-behaved across two orders of magnitude of epsilon, with no reversals. By epsilon=1.0, detection resolution (0.1 percentage points, $\approx$4--5 patients on this cohort) is close to what any statistical test could distinguish on a cohort this size, DP or not --- there is little room left for DP noise to be the binding constraint at that budget.
+
+\textbf{What is not robust.} There is a real intermediate band, not a hard on/off switch. At epsilon=0.02, even the widest tested gap (0.5\% vs.\ 5\%, a 10x relative difference) is only detected 83.3\% of the time (Table~\ref{tab:floor}) --- well above the 50\% bar used to call a cell ``detected,'' but well short of what most readers would call reliable. This is visible only in the full table, not in the single boundary number per epsilon.
+
+\textbf{The 50\% detection-rate threshold is a weak bar, and the boundary is sensitive to it.} Table~\ref{tab:floor-boundary} reports the boundary at both 0.5 and 0.8. The two agree everywhere in the tested grid except epsilon=0.02, where raising the bar from 0.5 to 0.8 shrinks the usable gap from 4.0 points down to only the single widest tested gap (4.5 points) qualifying at all --- a real qualitative change, not a rounding difference. Any policy claim of the form ``epsilon=$X$ can detect a gap of size $Y$'' should specify which reliability bar it means; a 50\%-threshold claim and an 80\%-threshold claim can describe meaningfully different worlds at the same epsilon.
+
+\textbf{CI coverage under heavy clipping is conservative, not permissive.} At the low epsilons this grid explores, 75--97\% of draws hit \texttt{privatize\_categorical\_proportions}'s lower-bound clip at 0 (confirmed in \texttt{src/check\_dp\_mechanisms.py}'s \texttt{proportions\_ci\_stays\_conser\-vative\_under\_heavy\_clipping} check). The mechanism clips the \emph{point estimate}, not just the interval bounds, which shifts the CI's center rightward and measures $\approx$97.5\% empirical coverage instead of the nominal 95\% when clipping is frequent. This is a one-sided conservative bias --- it would, if anything, make the reported floor slightly \emph{worse} (fewer detections) than a perfectly-calibrated interval would give, not better --- so it does not fabricate the washout finding, but the exact boundary numbers in the heavy-clipping region (roughly epsilon $\leq$0.1) should be read as approximate, not as precise 95\%-calibrated values.
+
+\textbf{The primary sweep's saturation was a genuine methodology gap, not a free positive result.} An earlier draft of this study would have reported Table~\ref{tab:primary} at face value: ``DP preserves detectability of subgroup underrepresentation across the full 0.1--10 epsilon range.'' That statement is true as far as it goes, but only because the tested gaps (relative to a fixed 5\% reference) were wide enough that the shared \texttt{EPSILON\_SWEEP}'s floor never got close to washing them out. Table~\ref{tab:floor} shows the real floor sits almost entirely below that sweep's lower bound. A study whose entire point is finding a detection floor should not report ``no floor found'' as its headline without first checking whether the tested range was wide enough to find one.
+
+\section{Limitations}
+\begin{itemize}
+\item Single reference proportion (5\%) and single cohort size (4{,}620 patients) tested. The Laplace mechanism's CI half-width does not depend on the reference proportion's value directly (only on \texttt{total} and epsilon), so the \emph{shape} of the floor curve should generalize to other reference values away from the clipping boundary --- but no sensitivity check across reference proportions or cohort sizes (analogous to Study A's $N$-sensitivity pass) was run to confirm this.
+\item Study B's own Implications section predicts that Study C's floor ``should be expected to push the needed epsilon higher... for smaller cohorts.'' This study does not directly test that claim: it fixes cohort size at 4{,}620 (matching Study B's test cohort) and varies only the relative gap against a fixed reference, rather than sweeping cohort size itself. Confirming or refuting Study B's prediction is a natural, currently-undone follow-up.
+\item 30 replicates/cell (matching Study B's convention) leaves real binomial sampling width at boundary cells --- e.g.\ Table~\ref{tab:primary-null}'s widest CI spans roughly 5--30 percentage points at $n$=30. More replicates would sharpen the exact boundary location, though not the qualitative shape of the curve.
+\item The reference proportion is treated as a known public constant with no estimation uncertainty of its own. A real representativeness check might compare against a reference that is itself only approximately known (e.g.\ estimated from census data with its own margin of error) --- that additional uncertainty is not modeled here.
+\item Fully synthetic: no dependency on real ChestX-ray14 demographics, so the absolute floor numbers (e.g.\ ``0.1-point gap detectable at epsilon=1 on a 4,620-patient cohort'') are specific to this cohort size and reference choice, not a general property of DP proportion mechanisms. Same caveat Study B already carries about its own cohort-size-specific epsilon floor.
+\item Single DP mechanism (\texttt{privatize\_categorical\_proportions}, Laplace-count-based) and single adjacency model (add/remove). No comparison against other subgroup-detection constructions was attempted, unlike Study B's debiased-estimator follow-up.
+\end{itemize}
+
+\section{Implications for the policy paper}
+\label{sec:policy-implications}
+
+\texttt{paper/Final\_Policy\_Recommendation.tex} is untouched until all three studies finish (per CLAUDE.md); this section records Study C's own read on its policy relevance now, for the same reason Study B's equivalent section does.
+
+\textbf{This is a genuine, qualified answer to the small-subgroup objection.} The objection this study exists to answer is roughly: ``DP noise will hide exactly the kind of small-subgroup underrepresentation a fairness audit most needs to catch.'' On this evidence, that is true only below a real, identifiable epsilon floor (roughly epsilon $\leq$0.02 for full washout on a cohort this size), not universally. Above that floor, and especially by epsilon$\approx$0.2--1, this mechanism detects even fairly small gaps (0.5--0.2 percentage points) reliably.
+
+\textbf{The two studies' floors are not the same number, and that gap matters.} Study B found subgroup AUC-gap preservation needs epsilon $\gtrsim$6 to be fully reliable on this same $\sim$4,620-patient cohort. Study C's detection floor for a multi-percentage-point prevalence gap is comfortably satisfied by epsilon as low as $\approx$0.1--0.2. If the policy paper needs a single epsilon recommendation that supports \emph{both} kinds of audit (representativeness checks and subgroup bias audits, per the Goal in CLAUDE.md), Study B's stricter floor (epsilon $\gtrsim$6), not Study C's, is the binding constraint --- a useful, concrete cross-study finding: these two audit types do not have the same DP-robustness profile, and a privacy budget chosen only against a representativeness-check floor could still leave subgroup bias audits unreliable.
+
+\textbf{The floor is real, though, and worth stating explicitly.} Below epsilon$\approx$0.02, this study is a concrete demonstration that DP genuinely can defeat a small-subgroup representativeness check, not just a theoretical risk --- the same category of concern the policy draft's ``Small Populations Are Harmed by the Noise'' section already raises, now with a second project-generated instance (alongside Study B's low-epsilon direction instability) rather than relying solely on external citation.
+
+\textbf{Recommended framing for the eventual policy text.} State two floors, not one, scoped to what each protects: reliable subgroup \emph{bias audits} need epsilon $\gtrsim$6 (Study B), while reliable subgroup \emph{representativeness checks} of the kind tested here need much less, roughly epsilon $\gtrsim$0.2--1 depending on the gap size and reliability bar required (Table~\ref{tab:floor-boundary}) --- both measured on a $\sim$4,620-patient cohort, and both should be stated as conditional on that scale per the Limitations above, not generalized to smaller subgroups or different reference proportions without further work.
+
+\end{document}
