@@ -1,0 +1,144 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\usepackage{float}
+\usepackage{titlesec}
+
+\setlength{\parskip}{0.6em}
+\setlength{\parindent}{0pt}
+\titlespacing*{\section}{0pt}{1.2ex plus 0.5ex minus 0.2ex}{0.6ex plus 0.2ex}
+\titlespacing*{\subsection}{0pt}{1.0ex plus 0.5ex minus 0.2ex}{0.4ex plus 0.2ex}
+
+\title{Does a Differentially Private Sex Label Preserve a Subgroup Bias Audit?}
+\author{Andrew}
+\date{August 20, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Subgroup bias audits of medical imaging models require demographic attributes, which are themselves sensitive. If those attributes were released under differential privacy, would the audit still reach the same conclusion? We answer this empirically for a concrete, widely cited audit: the sex-stratified AUC gap of a chest radiograph pneumothorax classifier. Patient sex is protected with per-record randomized response --- each of 4,620 test patients' sex labels is independently flipped with probability $1/(1+e^{\epsilon})$ --- and the subgroup AUC gap is recomputed from the privatized labels, over ten privacy budgets from $\epsilon=0.1$ to $\epsilon=10$, with 30 independent draws at each budget. We score an audit as surviving if it reproduces the true gap's direction and comes within 15\% of its magnitude. Survival is fully reliable only at $\epsilon \geq 6$ (30/30 draws; gap standard deviation $\leq0.002$). At $\epsilon=4$ and $\epsilon=5$ survival is 90\% (95\% CI [74\%, 97\%]), at $\epsilon=3$ it is a near-exact coin flip, and below $\epsilon=2$ the audit fails more often than not. More seriously, at $\epsilon \leq 1$ the audit returns the \emph{wrong sign} in 10--30\% of draws --- reporting the minority group as better served than the majority. We also show that a single privatized draw is an unreliable basis for any per-budget claim: the reliability threshold we report is visible only under replication. The practical conclusion is that differentially private demographic labels can support this class of audit, but only at privacy budgets on the loose end of what is commonly described as meaningful protection.
+\end{abstract}
+
+\section{Introduction}
+
+Auditing a clinical machine learning model for demographic bias requires knowing patients' demographics. This creates a tension that is often noted and rarely quantified: the attributes that make an audit possible are the same attributes that make a released dataset re-identifiable or otherwise sensitive. Differential privacy \cite{dwork2006, dwork2014} offers a principled route out --- release the demographic attribute under a formal privacy guarantee, and let auditors work with the protected version --- but only if the audit still reaches the right answer on protected data.
+
+We test this directly. The audit in question is the sex-stratified AUC gap of a pneumothorax classifier trained on a sex-imbalanced subset of NIH ChestX-ray14 \cite{wang2017}, an instance of the effect reported by Larrazabal et al.\ \cite{larrazabal2020}. A companion study established this gap on a frozen test cohort of 4,620 patients and characterised its uncertainty; the present study treats that output as fixed and varies only one thing --- how much privacy noise is applied to the sex label used to stratify the audit.
+
+The question is not whether privacy noise attenuates the measured gap --- it obviously does --- but where the threshold lies at which an auditor working from protected labels still draws the same conclusion as one working from true labels, and how sharp that threshold is. Our contributions are: a measured reliability threshold for this audit under per-record randomized response at a realistic cohort scale; evidence that below that threshold the failure mode includes sign errors, not merely attenuation; and a demonstration that single-draw evaluation of a stochastic privacy mechanism systematically overstates reliability.
+
+\section{Methods}
+
+\textbf{Input.} A frozen predictions file from the companion study, restricted to the test split: 4,620 patients (2,470 male, 2,150 female), each with a ground-truth pneumothorax label, a model score, and a true sex label. Per-patient scores are aggregated across that patient's images by mean and labels by max, matching the upstream study's convention. No model is retrained and no images are read; the only quantity manipulated in this study is the sex label. Recomputed directly from this file, the true subgroup AUC gap (male AUC minus female AUC) is 0.06704.
+
+\textbf{Privacy mechanism.} Patient sex is protected with classic randomized response \cite{warner1965}, implemented as the \texttt{Binary} mechanism of \texttt{diffprivlib} \cite{holohan2019} and applied independently to every test patient's true label. Each label is retained with probability $e^{\epsilon}/(1+e^{\epsilon})$ and flipped otherwise, satisfying $\epsilon$-differential privacy per record. This is a local, per-record release rather than an aggregate one, which matters for the threat model: cohort membership is not secret here (the patient split is public), so what needs protecting is each known patient's sensitive \emph{attribute}, not their presence in the dataset. Randomized response protects exactly that, and since each released label is a single independent query, no composition across categories arises.
+
+To put the budgets in concrete terms: the expected fraction of patients whose released sex differs from their true sex is 47.5\% at $\epsilon=0.1$, 26.9\% at $\epsilon=1$, 4.7\% at $\epsilon=3$, and 0.25\% at $\epsilon=6$ --- about 11 of the 4,620 patients at the last of these.
+
+\textbf{Privacy budgets.} $\epsilon \in \{0.1, 0.5, 1, 2, 3, 4, 5, 6, 8, 10\}$. This grid was chosen to span commonly cited budgets while placing four points around the transition region located by a preliminary diagnostic.
+
+\textbf{Audit criterion.} At each budget, subgroups are assigned from the privatized sex labels and the AUC gap is recomputed; ground-truth labels and model scores are untouched. An audit \emph{survives} if the recomputed gap has the same sign as the true gap and its magnitude falls within 15\% of the true value, i.e.\ in $[0.057, 0.077]$. It is \emph{washed out} otherwise. The 15\% tolerance is a fixed convention of this study, not derived from the data.
+
+\textbf{Replication.} Because the mechanism is stochastic, every budget was evaluated over 30 independent draws from a seed pool disjoint from the single reference draw. We report the per-budget \emph{survival rate} over those 30 draws with a Wilson score 95\% confidence interval \cite{wilson1927}, and the rate at which the recomputed gap has the correct sign. Replication is essential rather than decorative here: AUC is rank-sensitive, so the recomputed gap depends on \emph{which} patients were relabelled and not only how many, and the concentration one might expect from 4,620 independent coin flips does not straightforwardly stabilise it.
+
+\section{Results}
+
+\subsection{A single draw per budget}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrrll}
+\toprule
+$\epsilon$ & Recomputed gap & Deviation from true & Correct sign & Survived \\
+\midrule
+0.1  & 0.0355 & 47.1\% & Yes & No \\
+0.5  & 0.0572 & 14.7\% & Yes & Yes \\
+1.0  & 0.0466 & 30.4\% & Yes & No \\
+2.0  & 0.0936 & 39.7\% & Yes & No \\
+3.0  & 0.0596 & 11.1\% & Yes & Yes \\
+4.0  & 0.0661 & 1.3\%  & Yes & Yes \\
+5.0  & 0.0672 & 0.3\%  & Yes & Yes \\
+6.0  & 0.0660 & 1.5\%  & Yes & Yes \\
+8.0  & 0.0663 & 1.1\%  & Yes & Yes \\
+10.0 & 0.0670 & 0.0\%  & Yes & Yes \\
+\bottomrule
+\end{tabular}
+\caption{One privatized draw per budget. True gap 0.0670 throughout.}
+\label{tab:canonical}
+\end{table}
+
+Read alone, Table~\ref{tab:canonical} suggests a reassuring picture: the sign of the disparity is recovered at every budget including the strictest, and magnitudes settle to within a few percent from $\epsilon=4$ upward. Section~\ref{sec:replication} shows that both readings are artefacts of this particular draw.
+
+\subsection{Thirty draws per budget}
+\label{sec:replication}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrrrl}
+\toprule
+$\epsilon$ & Mean gap (SD) & Mean deviation & Correct-sign rate & Survival rate (95\% CI) \\
+\midrule
+0.1  & 0.0119 (0.0269) & 82.7\% & 70.0\%  & 3.3\% [0.6, 16.7] \\
+0.5  & 0.0169 (0.0240) & 75.0\% & 73.3\%  & 10.0\% [3.5, 25.6] \\
+1.0  & 0.0232 (0.0236) & 65.8\% & 90.0\%  & 6.7\% [1.8, 21.3] \\
+2.0  & 0.0504 (0.0164) & 26.0\% & 96.7\%  & 36.7\% [21.9, 54.5] \\
+3.0  & 0.0626 (0.0108) & 14.1\% & 100\%   & 50.0\% [33.2, 66.8] \\
+4.0  & 0.0652 (0.0073) & 8.3\%  & 100\%   & 90.0\% [74.4, 96.5] \\
+5.0  & 0.0651 (0.0047) & 4.1\%  & 100\%   & 90.0\% [74.4, 96.5] \\
+6.0  & 0.0668 (0.0016) & 1.7\%  & 100\%   & 100\%  [88.6, 100] \\
+8.0  & 0.0671 (0.0004) & 0.3\%  & 100\%   & 100\%  [88.6, 100] \\
+10.0 & 0.0671 (0.0001) & 0.04\% & 100\%   & 100\%  [88.6, 100] \\
+\bottomrule
+\end{tabular}
+\caption{30 independent draws per budget. Intervals are Wilson score 95\% intervals at $n=30$.}
+\label{tab:replication}
+\end{table}
+
+Three findings follow from Table~\ref{tab:replication}.
+
+\textbf{The audit is fully reliable only at $\epsilon \geq 6$.} At and above that budget, all 30 draws survive and the recomputed gap has a standard deviation of at most 0.0016 --- an auditor working from protected labels obtains effectively the same number as one working from true labels. Below it, survival is probabilistic: 90\% at $\epsilon=4$ and $\epsilon=5$, 50\% at $\epsilon=3$, 36.7\% at $\epsilon=2$, and under 10\% at every budget below that.
+
+\textbf{At low budgets the audit returns the wrong sign, not merely a noisy magnitude.} At $\epsilon=0.1$ the sign is correct in only 70\% of draws, and at $\epsilon=0.5$ in 73\%. Almost a third of audits at these budgets would report that the model performs \emph{better} on the minority group than the majority --- the opposite of the true finding, and a qualitatively different failure from attenuation toward zero. Sign reliability recovers quickly: 90\% at $\epsilon=1$, 96.7\% at $\epsilon=2$, and 100\% at $\epsilon \geq 3$.
+
+\textbf{The single-draw table overstated reliability at every interesting budget.} Table~\ref{tab:canonical} reported the correct sign at all ten budgets, including $\epsilon=0.1$ where the true rate is 70\%. It reported deviations of 1.3\% and 0.3\% at $\epsilon=4$ and $\epsilon=5$, budgets where one draw in ten in fact fails. And it reported survival at $\epsilon=0.5$, where the true rate is 10\%. The two evaluation designs happen to agree on a single summary statistic --- the smallest budget above which survival is at least even and stays so, which is $\epsilon=3$ under both --- but that coincidence does not rescue the per-budget claims.
+
+\section{Discussion}
+
+\textbf{What is robust.} Two claims are supported without qualification by these data. The direction of the subgroup disparity is recovered essentially always once $\epsilon \geq 2$ (96.7--100\% of draws). Its magnitude is recovered reliably once $\epsilon \geq 6$, where the residual variation is two orders of magnitude smaller than the effect being measured. On a cohort of this size, differentially private sex labels can support a subgroup bias audit.
+
+\textbf{What is not robust, and why it matters.} Everything between $\epsilon=0.5$ and $\epsilon=5$ is probabilistic. Survival rises roughly monotonically through that band but is nowhere near deterministic until $\epsilon=6$, and the confidence intervals in Table~\ref{tab:replication} are wide enough that per-budget rates in the borderline region should be read as ``consistent with'' rather than ``equal to'' their point estimates. A claim of the form ``the audit survives at $\epsilon=X$'' for $X$ in this range needs to be stated as a survival rate with an interval, not as a boolean outcome from one release.
+
+\textbf{The reliability threshold is a loose privacy budget.} $\epsilon \geq 6$ corresponds to $e^{\epsilon} \approx 400$, well outside the range ($\epsilon \approx 0.1$--$2$) usually intended by descriptions of meaningful or moderate differential privacy. The honest summary of this study is therefore qualified support rather than blanket support: this class of audit is compatible with differential privacy, but not at the budgets most often cited as protective. Below $\epsilon \approx 3$ the audit degrades from imprecise to actively misleading, which is a concrete instance of a known hazard --- carelessly applied privacy noise can distort the very subgroup comparisons a fairness audit exists to make.
+
+\textbf{Post-hoc correction does not rescue low budgets.} Since the flip probability is public, it is natural to ask whether the released labels can be reweighted to undo the attenuation --- free under differential privacy's post-processing immunity. We implemented the natural version of this, estimating each patient's posterior probability of belonging to the majority group from the observed label and the known flip probability, and computing a sample-weighted AUC gap. Scored on the same 30 draws per budget, it performed worse than the naive estimator at every budget below $\epsilon=5$ (e.g.\ 3.3\% versus 36.7\% survival at $\epsilon=2$) and identically above it. Two reasons compound: the population-share correction divides by $(2p-1)$, which becomes high-variance exactly where correction would matter most, and more fundamentally AUC is a pairwise rank statistic, so reweighting the \emph{instances} passed to the estimator does not correctly reweight the \emph{pairs} it is computed over. A correct construction would need to reweight comparisons rather than records; we did not attempt one.
+
+\textbf{The tolerance band is narrower than the reference's own uncertainty.} The 15\% band, $[0.057, 0.077]$, is considerably tighter than the bootstrap interval on the reference gap itself ([0.0230, 0.1118] in the companion study). Holding the reference fixed across all draws is deliberate --- it isolates privacy-mechanism noise from test-set sampling noise, the right decomposition for this question --- but ``within 15\% of the true gap'' should not be read as implying the true gap is known to that precision. It is not.
+
+\section{Limitations}
+\begin{itemize}\itemsep0.2em
+\item The reference gap (0.0670) is the largest of five training-seed estimates in the companion study, whose range is 0.0396--0.0670, because the frozen handoff file is that study's canonical run. A smaller true gap would be harder to preserve at the same absolute noise level, since AUC estimation noise is roughly constant on an absolute scale while the 15\% tolerance is relative. The $\epsilon \geq 6$ threshold should therefore be read as conditional on this specific, comparatively favourable reference, not as a bound that would necessarily hold against a typical training run.
+\item The 15\% survival tolerance and the budget grid are fixed conventions; no sensitivity analysis over the tolerance was performed.
+\item Scope is a single imbalance condition (90/10) and a single pathology label, so nothing here indicates how the threshold would move against a smaller true gap, such as the 0.017--0.04 gaps the companion study reports at more balanced training ratios.
+\item Results are empirical simulation on one dataset realisation. No closed-form relationship between flip probability and expected AUC-gap attenuation was derived, which would explain why $\epsilon=0.1$ retains a mean gap of 0.012 rather than washing fully to zero, and would generalise beyond this grid.
+\item Thirty draws per budget leaves real binomial width; the survival rates in Table~\ref{tab:replication} carry standard errors of roughly 5.5 percentage points at $p=0.9$, and that uncertainty is not propagated into the threshold claim.
+\item A single mechanism family (randomized response) and one post-processing variant were evaluated. Other local constructions were not.
+\end{itemize}
+
+\begin{thebibliography}{9}
+\bibitem{dwork2006} Dwork, C., McSherry, F., Nissim, K., \& Smith, A. (2006). Calibrating noise to sensitivity in private data analysis. \emph{Theory of Cryptography (TCC)}, 265--284.
+\bibitem{dwork2014} Dwork, C., \& Roth, A. (2014). The algorithmic foundations of differential privacy. \emph{Foundations and Trends in Theoretical Computer Science}, 9(3--4), 211--407.
+\bibitem{holohan2019} Holohan, N., Braghin, S., Mac Aonghusa, P., \& Levacher, K. (2019). Diffprivlib: The IBM differential privacy library. \emph{arXiv:1907.02444}.
+\bibitem{larrazabal2020} Larrazabal, A. J., Nieto, N., Peterson, V., Milone, D. H., \& Ferrante, E. (2020). Gender imbalance in medical imaging datasets produces biased classifiers for computer-aided diagnosis. \emph{PNAS}, 117(23), 12592--12594.
+\bibitem{wang2017} Wang, X., Peng, Y., Lu, L., Lu, Z., Bagheri, M., \& Summers, R. M. (2017). ChestX-ray8: Hospital-scale chest X-ray database and benchmarks on weakly-supervised classification and localization of common thorax diseases. \emph{CVPR}.
+\bibitem{warner1965} Warner, S. L. (1965). Randomized response: A survey technique for eliminating evasive answer bias. \emph{Journal of the American Statistical Association}, 60(309), 63--69.
+\bibitem{wilson1927} Wilson, E. B. (1927). Probable inference, the law of succession, and statistical inference. \emph{Journal of the American Statistical Association}, 22(158), 209--212.
+\end{thebibliography}
+
+\end{document}
