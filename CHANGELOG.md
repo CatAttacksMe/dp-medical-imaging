@@ -1,5 +1,67 @@
 # Changelog / Lab Notes
 
+## [Study B] 2026-08-19 (seed replication; all-one-class guard fix)
+- A second technical review (post-mechanism-rework) flagged two issues,
+  both addressed here — see CLAUDE.md's new "Study B — Seed Replication"
+  section for the full account.
+- **`_subgroup_auc_gap` robustness fix.** Previously only guarded against a
+  subgroup being fully empty; a nonempty subgroup with only one
+  `true_label` value present also crashes `roc_auc_score` ("Only one class
+  present in y_true" — confirmed directly, not assumed). Not triggered
+  anywhere in the current `EPSILON_SWEEP` given ~3-5% pneumothorax
+  prevalence, but was an unguarded path. Now returns `None` (same NaN/False
+  handling as total erasure) for both failure modes.
+- **30-seed replication added** (`run_seed_replication()`,
+  `seed_replication_summary()`), separate seed pool
+  (`REPLICATION_BASE_SEED=2000`) from the canonical sweep, ~80s total —
+  cheap enough to run by default, not flag-gated. Writes
+  `results/study_b/seed_replication/dp_gap_replication.csv`; summary
+  reported here, not saved as its own file (same pattern as Study A's
+  cross-seed gap spread).
+- **The replication changed the honest headline, not just added error
+  bars:**
+
+  | epsilon | dp_gap mean (std) | direction agreement | survival rate |
+  |---|---|---|---|
+  | 0.1 | 0.0119 (0.027) | 70.0% | 3.3% |
+  | 0.5 | 0.0169 (0.024) | 73.3% | 10.0% |
+  | 1.0 | 0.0232 (0.024) | 90.0% | 6.7% |
+  | 2.0 | 0.0504 (0.016) | 96.7% | 36.7% |
+  | 3.0 | 0.0626 (0.011) | 100% | 50.0% |
+  | 4.0 | 0.0652 (0.007) | 100% | 90.0% |
+  | 5.0 | 0.0651 (0.005) | 100% | 90.0% |
+  | 6.0 | 0.0668 (0.002) | 100% | 100% |
+  | 8.0 | 0.0671 (0.0004) | 100% | 100% |
+  | 10.0 | 0.0671 (0.0001) | 100% | 100% |
+
+  - **Direction is unreliable at low epsilon, not just magnitude** — the
+    canonical single draw (logged below) showed `direction_match=True` at
+    every epsilon including 0.1, and the previous entry reported that at
+    face value ("Direction is correct at every epsilon tested, including
+    0.1"). That was one lucky draw: direction agreement is actually only
+    70% at epsilon=0.1, 73% at 0.5, 66% at 1.0 (using the raw per-draw
+    rate; the table above rounds). This is a correction to the previous
+    entry's headline claim, not a new finding layered on top of it.
+  - **Epsilon=4 and 5 looked stable in the single-draw table
+    (`survived=True`, pct_diff 1.3%/0.3%) but are only 90% reliable** —
+    1 in 10 replicate draws at each of those epsilons did not survive.
+    Epsilon=3 is a near-exact coin flip (50.0%). Only epsilon>=6 hits
+    100% survival across all 30 replicates.
+  - The replication-based crossover (smallest epsilon at/above which
+    survival_rate>=50% holds for every larger epsilon too) is 3.0 — same
+    value as the canonical single draw's crossover — but that numeric
+    agreement doesn't rescue the single-draw table's specific claims about
+    4 and 5, which this replication shows were overstated.
+- **Revised headline for the paper:** the gap is *reliably* (100% across
+  30 replicates) preserved only at epsilon>=6. Below that, "survives" is
+  probabilistic, not guaranteed — meaningfully so even at epsilon=4-5,
+  points that looked solid from the single canonical draw alone. Any
+  policy claim citing a specific epsilon should cite its survival rate
+  from this table, not a single-draw `survived` boolean.
+- Canonical single-draw sweep (`BASE_SEED=42`) is unchanged from the
+  previous entry — logged again here only as the reference point the
+  replication is compared against, not re-run.
+
 ## [Study B] 2026-08-19 (epsilon sweep results, reworked mechanism)
 - Ran the full epsilon sweep against Study A's frozen `predictions_90_10.csv`
   test set (4,620 patients: 2,470 male, 2,150 female), using the reworked

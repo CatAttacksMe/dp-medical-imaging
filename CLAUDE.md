@@ -515,7 +515,10 @@ glob.
   direction or >15% off. Record the crossover epsilon.
 - **Deliverable:** `results/study_b/epsilon_sweep_results.csv` (`epsilon`,
   `true_gap`, `dp_gap`, `direction_match`, `pct_diff`, `survived`) + the
-  crossover epsilon noted in CHANGELOG.md.
+  crossover epsilon noted in CHANGELOG.md. A single canonical draw isn't
+  enough to trust that crossover on its own — see Seed Replication below,
+  and cite the replication's survival rate, not the canonical draw's
+  `survived` column, for any per-epsilon claim.
 
 ### Study B — Subgroup Assignment Mechanism (finalized, 2026-08-19, reworked same day)
 
@@ -575,6 +578,59 @@ glob.
   discarded mechanism's low-epsilon extension (0.001-0.05) since
   randomized response is already deep in "washed out" territory there
   with no useful differentiation between points.
+
+### Study B — Seed Replication (finalized, 2026-08-19)
+
+- **Why:** a technical review of the single-canonical-draw sweep flagged
+  that, unlike the discarded mechanism, `privatize_categorical_label`'s
+  variance is real, not an artifact — AUC is rank-sensitive to *which*
+  specific patients get relabeled, not just how many, so the
+  concentration you'd expect from 4,620 independent coin flips doesn't
+  straightforwardly stabilize the reported gap. A single draw per epsilon
+  can't distinguish "this epsilon reliably preserves the gap" from "this
+  epsilon happened to preserve it this time" — the same reasoning as
+  Study A's Seed Replication, applied to Study B's own stochastic
+  mechanism instead of training stochasticity.
+- **Scope:** all ten `EPSILON_SWEEP` points, 30 independent replicate
+  draws each (`N_REPLICATION_SEEDS`), using a separate seed pool
+  (`REPLICATION_BASE_SEED=2000`) from the canonical single-draw sweep
+  (`BASE_SEED=42`) so neither can reproduce the other's draws. Cheap
+  enough (no GPU, pure per-record simulation, ~80s total) to just run by
+  default in `main()` rather than gating behind a flag the way Study A's
+  GPU-hour-costly replication had to.
+- **What the replication found that the single canonical draw hid:**
+  running it changed the honest headline, not just added error bars.
+  - **Direction is unreliable at low epsilon too, not just magnitude** —
+    the canonical draw showed `direction_match=True` at every epsilon
+    including 0.1, which the original write-up reported at face value.
+    Across 30 replicates, direction agreement is only 70% at epsilon=0.1,
+    73% at 0.5, 66% at 1.0 (rising to 100% by epsilon=3). The single draw
+    happening to get direction right at 0.1 was luck, not a property of
+    that epsilon.
+  - **The apparent stability at epsilon=4 and 5 in the single-draw table
+    was also luck.** Survival *rate* across 30 replicates is 90% at both
+    — not the 100%-looking "True, pct_diff=1.3%/0.3%" the canonical draw
+    reported. Epsilon=3 is a near-exact coin flip (50.0% survival rate).
+    Only epsilon>=6 hits 100% survival across all 30 replicates.
+  - The canonical-draw crossover (3.0) and the replication-based crossover
+    (smallest epsilon at/above which survival_rate>=50% holds for every
+    larger epsilon too) landed on the same value this time — but that
+    agreement doesn't rescue the single-draw table's per-epsilon claims at
+    4 and 5, which the replication shows were overstated.
+- **Output contract:** `run_seed_replication()` writes
+  `results/study_b/seed_replication/dp_gap_replication.csv` (`epsilon`,
+  `seed`, `true_gap`, `dp_gap`, `direction_match`, `pct_diff`, `survived`
+  — one row per epsilon×replicate). Not part of the frozen deliverable —
+  the canonical `epsilon_sweep_results.csv` schema is unchanged. The
+  summary (mean/std `dp_gap` and `pct_diff`, direction-agreement rate,
+  survival rate per epsilon) is computed by `seed_replication_summary()`
+  and reported in CHANGELOG.md, not saved as its own file — same pattern
+  as Study A's cross-seed gap spread.
+- **Reporting:** if the paper cites a crossover epsilon or a "the gap
+  survives at epsilon=X" claim, it should cite the replication's survival
+  rate at that epsilon, not the canonical single draw's `survived`
+  column — the canonical sweep stays useful as a reproducible point
+  reference, not as the epsilon-by-epsilon narrative.
 
 ---
 
