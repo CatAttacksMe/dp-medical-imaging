@@ -845,13 +845,19 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
   — the same replicate-draw design as the primary sweep, on a dedicated
   finer grid (`FLOOR_EPSILONS` = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5,
   1.0], `FLOOR_PREVALENCES` = [0.005, 0.01, 0.02, 0.03, 0.035, 0.04,
-  0.042, 0.045, 0.048, 0.049]), 30 replicates/cell, own seed pool
+  0.042, 0.045, 0.048, 0.049, 0.05]), 30 replicates/cell, own seed pool
   (`FLOOR_BASE_SEED`). This does **not** redefine `EPSILON_SWEEP` or the
   primary `PREVALENCES` list — the primary sweep stays on the shared
   epsilon axis for cross-study comparability in the final paper; this is
   an additive, separately-labeled analysis, matching the precedent set by
   Study A's Sample-Size Sensitivity and Study B's Debiased Estimator
-  sections.
+  sections. `FLOOR_PREVALENCES` includes `REFERENCE_PROPORTION` (0.05)
+  itself — an initial version omitted it, so the fine grid's own
+  false-positive rate at its distinctive low epsilons (down to 0.005) was
+  never actually measured; the "washed out" reading relied on the
+  primary sweep's epsilon>=0.1 null rate as a stand-in. Confirmed
+  separately (0-10% across epsilon 0.005-1.0, consistent with nominal
+  5% at n=30) before trusting the result below.
 - **Output contract:** `results/study_c/floor_localization.csv`, same
   column schema as `detection_floor.csv` above. Not part of the frozen
   deliverable. `floor_prevalence_by_epsilon()` computes, per epsilon, the
@@ -868,6 +874,28 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
   actual headline finding — the primary sweep's near-total saturation was
   a range-selection artifact of reusing `EPSILON_SWEEP`, not evidence
   that DP preserves detectability everywhere.
+- **Threshold-sensitivity caveat:** `floor_prevalence_by_epsilon`'s
+  default "reliably detected" bar (`rate_threshold=0.5`) is a fairly weak
+  one — barely better than a coin flip — and with 30 replicates/cell the
+  boundary is sensitive to exactly where it's drawn. Concrete example:
+  raising the bar to 0.8 shrinks epsilon=0.02's boundary from a
+  4-percentage-point gap down to only the widest tested gap (4.5 points)
+  qualifying at all — a real qualitative change, not just a number
+  shift. `main()` reports the floor at both 0.5 and 0.8 for this reason;
+  the paper draft should show the full curve (or both thresholds), not
+  cite the 0.5-threshold boundary alone as if it were a hard cutoff.
+- **CI-coverage caveat:** at the low epsilons this grid explores, 75-97%
+  of draws hit `privatize_categorical_proportions`'s lower-bound clip at
+  0 (confirmed empirically, not just at the check's specific test point —
+  see `proportions_ci_stays_conservative_under_heavy_clipping` in
+  `src/check_dp_mechanisms.py`). This shifts the CI's center rightward
+  (point-estimate clipping, not just interval-bound clipping), giving
+  ~97.5% empirical coverage instead of nominal 95% — a conservative,
+  one-sided bias. It doesn't fabricate the washout finding (conservative
+  bias means *fewer* detections, not more, so if anything the true floor
+  is very slightly better than reported at epsilon<=0.1), but the exact
+  boundary numbers above should be read as approximate under heavy
+  clipping, not exact 95%-calibrated values.
 
 ---
 

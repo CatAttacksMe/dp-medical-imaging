@@ -1,5 +1,56 @@
 # Changelog / Lab Notes
 
+## [Study C] 2026-08-20 (results review: fixed 3 methodology gaps found by re-checking the initial pass)
+- A results review (before writing `study_c_draft.tex`) re-verified the
+  initial implementation's own claims rather than just re-reading the
+  code, and found three gaps worth fixing before the data is trustworthy
+  enough to draft from. None overturn the qualitative finding (a real
+  floor exists; washout below ~epsilon 0.02, near-full resolution by
+  epsilon~1 at this cohort size) — all three affect precision/defensibility
+  of the exact numbers.
+- **Gap 1 — the low-count coverage check never exercised the regime the
+  exploratory sweep actually uses.** The check added alongside the
+  initial implementation (`proportions_ci_achieves_nominal_coverage_at_low_counts`,
+  epsilon={0.5,1,2}) measured *zero* lower-bound clipping at all three
+  tested epsilons — it validated a "low count" regime, not the "low
+  count AND low epsilon" regime `floor_localization.csv` actually probes
+  (epsilon down to 0.005). Empirically, at those lower epsilons 75-97% of
+  draws clip. Added `proportions_ci_stays_conservative_under_heavy_clipping`
+  to `src/check_dp_mechanisms.py` (committed to `main` first, then merged
+  into `study-c`): confirms coverage stays >=~95% (conservative, not
+  under-covering) under heavy clipping, and asserts the tested epsilons
+  actually trigger clipping so the check can't silently stop testing what
+  it claims to. All 18 checks pass. See CLAUDE.md, Study C — Fine-Grained
+  Floor Localization, CI-coverage caveat.
+- **Gap 2 — `floor_localization.csv` had no null-condition control of its
+  own.** `FLOOR_PREVALENCES` didn't include `REFERENCE_PROPORTION`
+  (0.05), so the fine grid's own false-positive rate at its distinctive
+  low epsilons was never measured in the committed data — the "washed
+  out" interpretation relied on the primary sweep's epsilon>=0.1 null
+  rate as an unverified stand-in for epsilon<0.1. Added 0.05 to
+  `FLOOR_PREVALENCES`; confirmed false-positive rate stays 0-10% across
+  epsilon 0.005-1.0 (consistent with nominal 5% at n=30) — the washout
+  finding holds up on its own grid's evidence, not just the coarser
+  sweep's.
+- **Gap 3 — the "reliably detected" threshold (50%) is weak and the
+  boundary is sensitive to it.** `floor_prevalence_by_epsilon` now
+  reports the boundary at both 0.5 and 0.8. Concrete effect: at
+  epsilon=0.02, raising the bar from 0.5 to 0.8 shrinks the boundary from
+  a 4-point gap down to only the widest tested gap (4.5 points)
+  qualifying — a real qualitative change. The paper draft should present
+  the full curve or both thresholds, not cite the 0.5-threshold boundary
+  as a hard cutoff.
+- **Unexpected finding kept in, not smoothed over:** at epsilon=0.02, even
+  the widest tested gap (0.5% vs. 5% reference, a 10x relative
+  difference) is only detected 83% of the time — there's a real
+  intermediate band of unreliable-but-better-than-chance detection, not a
+  binary on/off transition. Visible in the full fine-grid table, not the
+  single-number floor summary.
+- **Deliverables updated:** `results/study_c/detection_floor.csv`
+  (unchanged, 1,800 rows) and `results/study_c/floor_localization.csv`
+  (now 2,640 rows, +1 prevalence point). `src/check_dp_mechanisms.py` on
+  `main` gained one check (18/18 passing), merged into `study-c`.
+
 ## [Study C] 2026-08-20 (initial implementation: run_study_c.py, detection_floor.csv, floor_localization.csv)
 - First implementation of Study C, on the `study-c` branch (branched from
   `main` after the methodology revision below was committed). Fully

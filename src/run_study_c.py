@@ -193,7 +193,12 @@ def detection_floor(summary_df, rate_threshold=0.5):
 # instead of quietly redefining the shared constant's meaning for Study C
 # alone. Writes to its own file, not detection_floor.csv.
 FLOOR_EPSILONS = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]
-FLOOR_PREVALENCES = [0.005, 0.01, 0.02, 0.03, 0.035, 0.04, 0.042, 0.045, 0.048, 0.049]
+# Includes REFERENCE_PROPORTION itself (0.05) so this grid carries its own
+# null-condition/false-positive control at its own (lower) epsilons -- an
+# earlier version omitted this, so the "washed out at low epsilon" reading
+# relied on the primary sweep's epsilon>=0.1 false-positive rate as a
+# stand-in, never actually confirmed at epsilon<0.1 in the committed data.
+FLOOR_PREVALENCES = [0.005, 0.01, 0.02, 0.03, 0.035, 0.04, 0.042, 0.045, 0.048, 0.049, REFERENCE_PROPORTION]
 FLOOR_OUTPUT_PATH = os.path.join(REPO_ROOT, "results", "study_c", "floor_localization.csv")
 FLOOR_BASE_SEED = 6000
 
@@ -230,6 +235,15 @@ def floor_prevalence_by_epsilon(summary_df, rate_threshold=0.5):
     only get easier to detect, not harder, so this is the boundary from
     which detection holds reliably all the way down to the smallest
     tested prevalence. Returns {epsilon: boundary_prevalence_or_None}.
+
+    `rate_threshold` default (0.5) is a fairly weak bar -- barely better
+    than a coin flip -- and with N_REPLICATION_SEEDS=30 the Wilson CIs
+    near the boundary are wide, so the reported boundary is sensitive to
+    exactly where this threshold sits (e.g. at epsilon=0.02, the
+    boundary cell's detection_rate is 83%, well above 0.5 but well short
+    of what most readers would call "reliable"). main() reports the
+    floor at both 0.5 and a stricter 0.8 threshold for this reason -- see
+    CLAUDE.md, Study C -- Fine-Grained Floor Localization.
     """
     floors = {}
     for epsilon, group in summary_df.groupby("epsilon"):
@@ -271,11 +285,23 @@ def main():
     print("\nFine-grid floor localization summary:")
     print(floor_summary.to_string(index=False))
 
-    boundary = floor_prevalence_by_epsilon(floor_summary)
-    print("\nFloor localization: boundary true_prevalence (smallest gap from "
-          f"{REFERENCE_PROPORTION} still reliably detected), by epsilon:")
-    for epsilon in FLOOR_EPSILONS:
-        print(f"  epsilon={epsilon}: {boundary.get(epsilon)}")
+    floor_null_summary = floor_summary[floor_summary["is_null_condition"]]
+    print(f"\nFloor-grid false-positive rate at true_prevalence={REFERENCE_PROPORTION} "
+          "(null condition), by epsilon — confirms the fine grid's own low epsilons "
+          "aren't just an artifact of comparing against the primary sweep's epsilon>=0.1 baseline:")
+    print(
+        floor_null_summary[
+            ["epsilon", "detection_rate", "detection_rate_ci_lower", "detection_rate_ci_upper"]
+        ].to_string(index=False)
+    )
+
+    real_gap_floor_summary = floor_summary[~floor_summary["is_null_condition"]]
+    for threshold in (0.5, 0.8):
+        boundary = floor_prevalence_by_epsilon(real_gap_floor_summary, rate_threshold=threshold)
+        print(f"\nFloor localization: boundary true_prevalence (smallest gap from "
+              f"{REFERENCE_PROPORTION} still reliably detected, threshold={threshold}), by epsilon:")
+        for epsilon in FLOOR_EPSILONS:
+            print(f"  epsilon={epsilon}: {boundary.get(epsilon)}")
 
 
 if __name__ == "__main__":
