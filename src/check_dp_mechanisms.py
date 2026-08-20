@@ -201,6 +201,60 @@ def proportions_ci_achieves_nominal_coverage_at_low_counts():
 
 
 @check
+def proportions_ci_stays_conservative_under_heavy_clipping():
+    """The check above validates epsilon in {0.5, 1.0, 2.0} at a small
+    count — but confirmed (empirically, during Study C's results review)
+    to measure *zero* lower-bound clipping at all three, so it never
+    actually exercised the regime Study C's floor-localization sweep uses
+    (epsilon down to 0.005, where 75-97% of draws clip). A prior version
+    of this file only had that check, which gave false confidence about
+    an epsilon range it didn't actually probe.
+
+    `privatize_categorical_proportions` clips the *point estimate*, not
+    just the interval bounds (`proportion = max(0.0, noisy) / total` in
+    src/dp_mechanisms.py, before the CI is built around it) — when noise
+    frequently pushes the raw draw negative, this shifts the CI's center
+    rightward, which is a one-sided conservative bias (empirically ~97.5%
+    coverage, not 95%, when clipping is frequent), not an under-coverage
+    bug. This check asserts coverage doesn't drop *below* nominal (that
+    would mean the interval is silently overconfident, a real
+    correctness problem) while allowing it to run above nominal, and
+    separately asserts each tested epsilon actually triggers heavy
+    clipping — so if a future change to the mechanism stops the clipping
+    path from engaging here, this check fails loudly instead of quietly
+    testing nothing. See CLAUDE.md, Study C — Fine-Grained Floor
+    Localization."""
+    total, confidence, n_trials = 4620, 0.95, 2000
+    true_count = round(0.005 * total)  # ~23 — Study C's floor-localization low end
+    true_proportion = true_count / total
+
+    for epsilon in (0.005, 0.01, 0.02, 0.05):
+        hits = 0
+        clipped = 0
+        for seed in range(n_trials):
+            result = dp.privatize_categorical_proportions(
+                {"subgroup": true_count}, epsilon=epsilon, total=total, confidence=confidence, random_state=seed
+            )["subgroup"]
+            if result["ci_lower"] <= true_proportion <= result["ci_upper"]:
+                hits += 1
+            if result["ci_lower"] == 0.0:
+                clipped += 1
+        coverage = hits / n_trials
+        clip_rate = clipped / n_trials
+        assert clip_rate > 0.5, (
+            f"epsilon={epsilon}: only {clip_rate:.1%} of draws clipped — "
+            f"this check assumes the heavy-clipping regime is active"
+        )
+        # Binomial SE at n=2000 is ~0.5%; lower bound allows small-sample
+        # slack under nominal, upper bound is a generous cap on the known
+        # conservative bias — outside either edge would be a real finding.
+        assert 0.93 <= coverage <= 0.995, (
+            f"epsilon={epsilon}: empirical coverage {coverage:.3f} under heavy clipping "
+            f"({clip_rate:.1%} of draws) — expected >= ~0.95 (conservative bias), not lower"
+        )
+
+
+@check
 def label_flip_probability_matches_theory():
     """The core correctness check for privatize_categorical_label: kept
     probability should match e^epsilon / (1 + e^epsilon), the standard
