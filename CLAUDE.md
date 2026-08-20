@@ -822,6 +822,53 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
   canonical-file-plus-summary pattern as Study B's replication (see Study
   B — Seed Replication above).
 
+### Study C — Fine-Grained Floor Localization (exploratory, 2026-08-20)
+
+- **Why:** the primary sweep (`PREVALENCES` = 0.5%-5% against
+  `dp.EPSILON_SWEEP` = 0.1-10) came back almost entirely saturated at
+  100% detection — the gaps tested (relative to the fixed 5% reference)
+  were wide enough, and the ~4,620-patient cohort large enough, that even
+  the harshest epsilon in `EPSILON_SWEEP` barely dented detectability
+  (only the smallest gap, 4% vs. 5%, showed any degradation, and only at
+  epsilon=0.1: ~87% detection rate). This is the same shape of problem
+  Study B's *original* epsilon sweep had before being re-derived (see
+  Study B — Subgroup Assignment Mechanism above) — the fixed shared
+  sweep, calibrated for a different mechanism's noise profile, doesn't
+  resolve this mechanism's actual transition.
+- **Diagnostic:** a 60-trials/cell probe at gaps under 2 percentage
+  points from the reference and epsilon down to 0.005 located the real
+  transition: full washout (detection rate at the ~5% null false-positive
+  floor, regardless of gap size) at epsilon<=0.02, and progressively
+  finer resolution from epsilon~0.05 up to epsilon=1, where even a
+  0.1-percentage-point gap (4.9% vs. 5%) is detected ~87% of the time.
+- **What was added:** `run_floor_localization()` in `src/run_study_c.py`
+  — the same replicate-draw design as the primary sweep, on a dedicated
+  finer grid (`FLOOR_EPSILONS` = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5,
+  1.0], `FLOOR_PREVALENCES` = [0.005, 0.01, 0.02, 0.03, 0.035, 0.04,
+  0.042, 0.045, 0.048, 0.049]), 30 replicates/cell, own seed pool
+  (`FLOOR_BASE_SEED`). This does **not** redefine `EPSILON_SWEEP` or the
+  primary `PREVALENCES` list — the primary sweep stays on the shared
+  epsilon axis for cross-study comparability in the final paper; this is
+  an additive, separately-labeled analysis, matching the precedent set by
+  Study A's Sample-Size Sensitivity and Study B's Debiased Estimator
+  sections.
+- **Output contract:** `results/study_c/floor_localization.csv`, same
+  column schema as `detection_floor.csv` above. Not part of the frozen
+  deliverable. `floor_prevalence_by_epsilon()` computes, per epsilon, the
+  boundary `true_prevalence` (smallest gap from `REFERENCE_PROPORTION`)
+  at/below which detection holds reliably for every larger gap too —
+  mirrors `crossover_epsilon()`'s monotonic-window logic from
+  `src/run_study_b.py`, applied to the prevalence axis instead of the
+  epsilon axis. Reported in CHANGELOG.md, not saved as its own file.
+- **Result:** a clean, monotonic floor curve — at epsilon<=0.01 no tested
+  gap (up to the widest, 0.5% vs. 5%) is reliably detected; the boundary
+  gap shrinks steadily as epsilon rises (epsilon=0.02: ~4-point gap
+  needed; epsilon=0.1: ~0.8-point gap; epsilon=1.0: ~0.1-point gap, near
+  the resolution limit of a ~4,620-patient cohort). This is the study's
+  actual headline finding — the primary sweep's near-total saturation was
+  a range-selection artifact of reusing `EPSILON_SWEEP`, not evidence
+  that DP preserves detectability everywhere.
+
 ---
 
 ## Conventions

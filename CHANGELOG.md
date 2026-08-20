@@ -1,5 +1,61 @@
 # Changelog / Lab Notes
 
+## [Study C] 2026-08-20 (initial implementation: run_study_c.py, detection_floor.csv, floor_localization.csv)
+- First implementation of Study C, on the `study-c` branch (branched from
+  `main` after the methodology revision below was committed). Fully
+  synthetic — no dependency on Study A/B data, per CLAUDE.md.
+- **Resolved before implementation:** the "reference group" concept in
+  the original CLAUDE.md spec was ambiguous between (a) the subgroup's
+  complement within one cohort, or (b) a fixed external reference
+  proportion. (a) was rejected — at typical subgroup/majority separation
+  (e.g. 2% vs. 98%) a difference test would report "detected" at almost
+  any epsilon, testing nothing but "the subgroup is a minority."
+  Confirmed with Andy: reference is (b), a fixed public constant
+  (`REFERENCE_PROPORTION = 0.05`), not itself privatized. Detection is a
+  one-sample CI-vs-known-constant test on the subgroup's own privatized
+  count, not a two-CI difference test. CLAUDE.md's Study C section
+  updated to match before writing any code.
+- Also added `proportions_ci_achieves_nominal_coverage_at_low_counts` to
+  `src/check_dp_mechanisms.py` (shared infra, committed to `main` first)
+  — confirms `privatize_categorical_proportions`'s CI coverage holds at
+  the small counts (~23, 0.5% of the 4,620-patient reference total) this
+  study's low end implies, not just the larger counts the existing check
+  validated. All 17 checks pass.
+- **Primary sweep** (`PREVALENCES` = [0.5%, 1%, 2%, 3%, 4%, 5%] x
+  `dp.EPSILON_SWEEP`, 30 replicates/cell, reference total = 4,620
+  patients matching Study B's test cohort): came back almost entirely
+  saturated at 100% detection — the shared `EPSILON_SWEEP` (calibrated
+  for Study B's randomized-response mechanism, not this Laplace-count
+  mechanism) barely dented detectability at the gap sizes tested. Only
+  the smallest gap (4% vs. 5% reference) showed any degradation, and only
+  at epsilon=0.1 (86.7% detection rate, 30 replicates).
+- **Null-condition false-positive rate** (true_prevalence = 5% =
+  reference, no real gap), across epsilon 0.1-10: 0-13.3%, consistent
+  with the nominal 5% Type-I rate given n=30 binomial noise (Wilson CIs
+  all contain 5%) — the one-sample test is calibrated as expected.
+- **Fine-grained floor localization** (exploratory, see CLAUDE.md — Study
+  C, Fine-Grained Floor Localization): a 60-trial/cell diagnostic located
+  the real transition well below `EPSILON_SWEEP`'s 0.1 floor. Added a
+  dedicated finer grid (`FLOOR_EPSILONS` = 0.005-1.0, `FLOOR_PREVALENCES`
+  = gaps of 0.1-4.5 percentage points from the 5% reference), same
+  replicate design, written to `results/study_c/floor_localization.csv`
+  (not the frozen deliverable — additive analysis only). Result: a clean,
+  monotonic floor curve — no tested gap (up to 4.5 points) is reliably
+  detected at epsilon<=0.01; the boundary gap shrinks steadily as epsilon
+  rises (epsilon=0.02: needs ~4-point gap; epsilon=0.1: ~0.8-point gap;
+  epsilon=1.0: ~0.1-point gap, close to this cohort size's resolution
+  limit). This fine-grid result, not the saturated primary sweep, is the
+  study's actual headline finding.
+- **Deliverables:** `results/study_c/detection_floor.csv` (primary sweep,
+  1,800 rows) and `results/study_c/floor_localization.csv` (exploratory
+  fine grid, 2,400 rows), both with schema (`true_prevalence`, `epsilon`,
+  `seed`, `is_null_condition`, `noisy_count`, `noisy_proportion`,
+  `ci_lower`, `ci_upper`, `detected`).
+- **Not yet done:** `paper/study_drafts/study_c_draft.tex` (per CLAUDE.md,
+  created once Study C has results to record — this entry is the first
+  results, so that draft is the natural next step, not done in this
+  pass).
+
 ## [Study B] 2026-08-20 (limitations caveat: reference gap is Study A's max-of-5-seeds value, not typical)
 - A review of Study B's results flagged that the fixed reference gap used
   throughout the sweep (0.067036, from `predictions_90_10.csv`) is the
