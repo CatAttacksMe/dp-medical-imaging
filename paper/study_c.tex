@@ -1,0 +1,148 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\usepackage{float}
+\usepackage{titlesec}
+
+\setlength{\parskip}{0.6em}
+\setlength{\parindent}{0pt}
+\titlespacing*{\section}{0pt}{1.2ex plus 0.5ex minus 0.2ex}{0.6ex plus 0.2ex}
+\titlespacing*{\subsection}{0pt}{1.0ex plus 0.5ex minus 0.2ex}{0.4ex plus 0.2ex}
+
+\title{How Small a Subgroup Can Differential Privacy Still Flag\\ as Underrepresented?}
+\author{Andrew}
+\date{August 20, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent A standing objection to protecting demographic metadata with differential privacy is that the noise will conceal exactly what a representativeness check most needs to find: the underrepresentation of small subgroups. We quantify where that objection holds. On a synthetic cohort of 4,620 patients --- the scale of a realistic single-institution audit --- a subgroup's count is released under $\epsilon$-differential privacy and tested against a known, public reference proportion of 5\% by checking whether the released 95\% confidence interval excludes it. Sweeping true prevalence from 0.5\% to 5\% and $\epsilon$ from 0.005 to 10, with 30 independent releases per cell and a matched false-positive control, we find a sharp and well-behaved detection floor. Below $\epsilon = 0.01$ no tested gap is detectable, including a tenfold underrepresentation (0.5\% against a 5\% reference). Detectable gap size then shrinks monotonically with the privacy budget: roughly 4 percentage points at $\epsilon = 0.02$, 1.5 points at $\epsilon = 0.05$, 0.8 points at $\epsilon = 0.1$, and 0.1 points --- about five patients --- at $\epsilon = 1$. Across the conventionally cited range $\epsilon \in [0.1, 10]$, detection of multi-point gaps is essentially unimpaired. The objection is therefore real but bounded: differential privacy can defeat a small-subgroup representativeness check, but only at budgets one to two orders of magnitude stricter than those typically deployed, and far stricter than the budget the companion bias-audit study requires.
+\end{abstract}
+
+\section{Introduction}
+
+Representativeness checks --- does this cohort contain the share of a demographic group that it should? --- are among the simplest and most common uses of demographic metadata in clinical machine learning. They are also among the easiest to protect with differential privacy \cite{dwork2006, dwork2014}, since they need only an aggregate count rather than record-level attributes. A frequently raised objection is nonetheless that privacy noise will disproportionately harm exactly the groups such checks exist to protect: a subgroup that is 1\% of a cohort contributes a count small enough that additive noise could plausibly swamp it.
+
+This paper measures where that concern is justified. We ask: for a subgroup whose true prevalence falls short of an expected reference proportion, how large must the shortfall be, at a given privacy budget, before a differentially private release reliably reveals it?
+
+Two design points make the answer interpretable. First, the reference proportion is a fixed, public constant --- an externally known population figure such as a census or registry share --- rather than a second quantity estimated from the same cohort. Only the audited cohort's composition is sensitive, so only it consumes privacy budget, and the test reduces to a standard one-sample interval-containment check. Second, cohort size is fixed at 4,620 patients, matching the companion bias-audit study's test cohort so that both studies' budgets refer to the same real-world scale. Since the mechanism's interval half-width scales inversely with cohort size, a detection floor is meaningless without stating the cohort it was measured on.
+
+Our contributions are: a measured detection floor as a function of privacy budget, with a matched Type-I error control; evidence that this floor sits well below budgets in common use, so representativeness checks are largely robust in the deployed range; and a comparison against the companion study's far stricter threshold for subgroup bias audits, explaining why two audits on the same cohort differ by more than two orders of magnitude in the budget they need.
+
+\section{Methods}
+
+\textbf{Setup.} A synthetic cohort of 4,620 patients. A subgroup's true prevalence is set, its count is released under $\epsilon$-differential privacy, and the released proportion is compared against a fixed reference proportion of 5\%. The study has no dependence on real patient data or on any trained model; the only quantities manipulated are a count and a privacy budget.
+
+\textbf{Mechanism and threat model.} The subgroup count is privatized with a Laplace mechanism \cite{dwork2006} on the count, with the cohort total supplied as a public constant --- the standard convention that cohort size is known and only the statistic requires protection. The adjacency model is add/remove: this study asks how many members of a subgroup are present in the cohort, which is a membership question. This differs from the companion bias-audit study, which asks about a known cohort member's sensitive attribute and consequently required a different mechanism and adjacency model. The noise scale follows directly: the released count has standard deviation $\sqrt{2}/\epsilon$ patients, or roughly 71 patients at $\epsilon = 0.02$, 14 at $\epsilon = 0.1$, and 1.4 at $\epsilon = 1$.
+
+\textbf{Detection criterion.} A one-sample test. The release returns a point estimate and a closed-form 95\% confidence interval for the subgroup's proportion; the subgroup is \emph{detected} as underrepresented if that interval excludes the reference proportion of 5\%. Because the reference is a known constant rather than a second noisy estimate, no interval-overlap or difference-of-proportions construction is required, and the test is correctly calibrated as stated.
+
+\textbf{Sweeps and replication.} Two grids were run, each with 30 independent releases per (prevalence, budget) cell. The first covers true prevalences of 0.5\%, 1\%, 2\%, 3\%, 4\%, and 5\% against ten conventionally cited budgets from $\epsilon = 0.1$ to $\epsilon = 10$. The second is a finer grid concentrated where the transition actually occurs: prevalences of 0.5\%, 1\%, 2\%, 3\%, 3.5\%, 4\%, 4.2\%, 4.5\%, 4.8\%, 4.9\%, and 5\%, against $\epsilon \in \{0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0\}$, with an independent seed pool. We report a detection \emph{rate} per cell with a Wilson score 95\% interval \cite{wilson1927}, rather than a single boolean outcome, for the same reason the companion study does: one stochastic release near a boundary cannot distinguish a budget that reliably detects a gap from one that happened to.
+
+\textbf{False-positive control.} The cell in which true prevalence equals the reference proportion contains no real gap, so the rate at which the test still excludes the reference is a direct Type-I error measurement. It is included in both grids, and every detection rate below should be read against it.
+
+\section{Results}
+
+\subsection{Conventionally cited budgets}
+
+Across the ten budgets from $\epsilon = 0.1$ to $\epsilon = 10$, detection of the tested gaps is essentially unimpaired: 49 of the 50 non-null cells returned a detection rate of 100\% over 30 releases. The sole exception was the narrowest tested gap --- 4\% prevalence against the 5\% reference --- at the strictest of those budgets, $\epsilon = 0.1$, where the rate was 86.7\%.
+
+The matched null cells confirm the test is calibrated rather than simply permissive: false-positive rates ranged from 0\% to 13.3\% across the ten budgets, and every Wilson interval contained the nominal 5\%.
+
+This range therefore establishes an upper bound rather than a floor. The tested gaps correspond to shortfalls of 46 to 208 patients out of 4,620, while the mechanism's noise standard deviation is at most about 14 patients anywhere in this range --- signal exceeds noise by a wide margin throughout. Locating the floor requires going below $\epsilon = 0.1$ and to narrower gaps.
+
+\subsection{Locating the detection floor}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{r*{8}{r}}
+\toprule
+True prevalence & $\epsilon{=}0.005$ & 0.01 & 0.02 & 0.05 & 0.1 & 0.2 & 0.5 & 1.0 \\
+\midrule
+0.5\%          & 0.0\%  & 0.0\%  & 83.3\% & 100\%  & 100\%  & 100\%  & 100\%  & 100\% \\
+1.0\%          & 0.0\%  & 0.0\%  & 63.3\% & 100\%  & 100\%  & 100\%  & 100\%  & 100\% \\
+2.0\%          & 3.3\%  & 0.0\%  & 30.0\% & 100\%  & 100\%  & 100\%  & 100\%  & 100\% \\
+3.0\%          & 0.0\%  & 0.0\%  & 16.7\% & 86.7\% & 100\%  & 100\%  & 100\%  & 100\% \\
+3.5\%          & 0.0\%  & 0.0\%  & 10.0\% & 86.7\% & 100\%  & 100\%  & 100\%  & 100\% \\
+4.0\%          & 3.3\%  & 0.0\%  & 0.0\%  & 20.0\% & 93.3\% & 100\%  & 100\%  & 100\% \\
+4.2\%          & 3.3\%  & 0.0\%  & 6.7\%  & 23.3\% & 86.7\% & 100\%  & 100\%  & 100\% \\
+4.5\%          & 6.7\%  & 3.3\%  & 0.0\%  & 13.3\% & 30.0\% & 90.0\% & 100\%  & 100\% \\
+4.8\%          & 3.3\%  & 0.0\%  & 3.3\%  & 0.0\%  & 3.3\%  & 20.0\% & 93.3\% & 100\% \\
+4.9\%          & 6.7\%  & 3.3\%  & 10.0\% & 6.7\%  & 6.7\%  & 0.0\%  & 36.7\% & 86.7\% \\
+\midrule
+5.0\% (null)   & 3.3\%  & 0.0\%  & 0.0\%  & 3.3\%  & 10.0\% & 3.3\%  & 3.3\%  & 3.3\% \\
+\bottomrule
+\end{tabular}
+\caption{Detection rate over 30 independent releases per cell, against a fixed 5\% reference proportion on a 4,620-patient cohort. The final row is the no-gap control; its rate is the test's false-positive rate at that budget.}
+\label{tab:floor}
+\end{table}
+
+The null-condition row stays between 0\% and 10\% across the full grid, consistent with the nominal 5\% Type-I rate at $n = 30$. Detection rates in the body of the table are therefore interpretable against a stable baseline: values in the single digits indicate that no real signal is being recovered, not merely that the test is conservative.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rll}
+\toprule
+$\epsilon$ & Smallest detectable gap (50\% bar) & Smallest detectable gap (80\% bar) \\
+\midrule
+0.005 & none detected            & none detected \\
+0.01  & none detected            & none detected \\
+0.02  & 4.0 points (1.0\% prev.) & 4.5 points (0.5\% prev.) \\
+0.05  & 1.5 points (3.5\% prev.) & 1.5 points (3.5\% prev.) \\
+0.1   & 0.8 points (4.2\% prev.) & 0.8 points (4.2\% prev.) \\
+0.2   & 0.5 points (4.5\% prev.) & 0.5 points (4.5\% prev.) \\
+0.5   & 0.2 points (4.8\% prev.) & 0.2 points (4.8\% prev.) \\
+1.0   & 0.1 points (4.9\% prev.) & 0.1 points (4.9\% prev.) \\
+\bottomrule
+\end{tabular}
+\caption{Smallest shortfall from the 5\% reference detected at or above the stated rate, and detected at or above it for every larger shortfall as well. Bars of 50\% and 80\% are both reported; they agree everywhere except $\epsilon = 0.02$.}
+\label{tab:boundary}
+\end{table}
+
+The resulting floor curve is monotonic with no reversals across more than two orders of magnitude in $\epsilon$. At $\epsilon \leq 0.01$ the mechanism is fully washed out: even a tenfold underrepresentation (0.5\% against a 5\% reference, a shortfall of 208 patients) is indistinguishable from no gap at all, because the noise standard deviation of 141 patients at that budget is of the same order as the signal. From $\epsilon = 0.02$ upward the detectable gap shrinks steadily, reaching 0.1 percentage points --- roughly five patients --- at $\epsilon = 1$.
+
+\section{Discussion}
+
+\textbf{The objection is real but bounded.} That privacy noise conceals small-subgroup underrepresentation is confirmed as a genuine failure mode, not a theoretical one: below $\epsilon \approx 0.02$ this mechanism cannot flag even gross underrepresentation at this cohort size. But the floor sits one to two orders of magnitude below budgets in common use. At $\epsilon = 0.1$ a shortfall under one percentage point is already detectable, and by $\epsilon = 1$ the detection limit (about five patients out of 4,620) approaches what any statistical test could resolve on a cohort this size, with or without privacy noise. In the deployed range, privacy noise is not the binding constraint on a representativeness check; cohort size is.
+
+\textbf{There is an intermediate band, not an on/off switch.} Between full washout and full reliability lies a region where detection is real but unreliable, and this is visible only in the full rate table. At $\epsilon = 0.02$ the widest tested gap --- a tenfold underrepresentation --- is detected 83.3\% of the time (Table~\ref{tab:floor}): well above the bar used to call a cell detected, but short of what most readers would accept as reliable. Reporting only a boundary value per budget hides this.
+
+\textbf{The reported boundary depends on the reliability bar chosen.} Table~\ref{tab:boundary} reports the floor at both a 50\% and an 80\% detection bar. They agree everywhere except $\epsilon = 0.02$, where raising the bar shifts the boundary from a 4.0-point gap to only the single widest tested gap qualifying --- a qualitative change, not a rounding difference. Any claim of the form ``$\epsilon = X$ detects a gap of size $Y$'' should state which reliability bar it means; at the same budget, the two bars can describe meaningfully different situations. The full curve, not a single cutoff, is the result.
+
+\textbf{Interval coverage under heavy clipping is conservative.} At the strictest budgets explored here, 75--97\% of releases hit the mechanism's lower bound at zero. Because the point estimate is clipped and not only the interval bounds, the interval's centre shifts rightward and empirical coverage measures about 97.5\% rather than the nominal 95\%. This bias is one-sided and conservative: it produces \emph{fewer} detections than a perfectly calibrated interval would, so it cannot manufacture the washout finding --- if anything the true floor is marginally better than reported below $\epsilon \approx 0.1$. The boundary values in that region should nonetheless be read as approximate rather than as exactly 95\%-calibrated.
+
+\textbf{Two audits, two very different budgets.} The companion study finds that a subgroup \emph{bias} audit (a sex-stratified AUC gap) on this same 4,620-patient cohort requires $\epsilon \gtrsim 6$ to be fully reliable, whereas the representativeness check studied here is comfortably satisfied by $\epsilon \approx 0.1$--$1$. That is not an inconsistency between the two studies; it follows from three compounding differences.
+
+\begin{enumerate}\itemsep0.2em
+\item \emph{Aggregate versus per-record noise.} Here one noise draw perturbs a single aggregate count; there, every one of 4,620 patients' labels is independently perturbed. At $\epsilon = 6$ the per-record flip probability is only 0.25\%, but across the cohort that still relabels about 11 specific individuals, and at $\epsilon = 3$ about 219.
+\item \emph{What the noise feeds into.} Here the noised quantity \emph{is} the answer --- a perturbed count compared against a threshold, linear in the noise. There it is an input to a second, nonlinear, rank-based statistic, where moving 219 patients into the wrong subgroup shifts the result by no bounded amount but changes which score pairs are compared.
+\item \emph{Signal relative to each statistic's own noise floor.} The gaps tested here are 46--208 patients against a mechanism noise of 1--14 patients once $\epsilon$ exceeds 0.1, so signal swamps noise almost immediately, and the washout point at $\epsilon \approx 0.02$ (noise about 71 patients) is exactly where that comparison flips. A subgroup AUC gap of 0.067 estimated from 75--107 positive cases per group carries a sampling standard error of 0.02--0.03 before any privacy noise is added --- already only two to three times its own estimation floor.
+\end{enumerate}
+
+The two floors are correctly measuring different things and should be reported separately rather than blended into a single figure. If a privacy budget must support both kinds of audit, the bias-audit threshold is the binding constraint: a budget chosen against a representativeness-check floor alone would leave subgroup bias audits unreliable.
+
+\section{Limitations}
+\begin{itemize}\itemsep0.2em
+\item One reference proportion (5\%) and one cohort size (4,620) were tested. The Laplace mechanism's interval half-width depends on cohort size and budget but not directly on the reference value, so the shape of the floor curve should generalise to other reference proportions away from the clipping boundary --- but no sensitivity analysis across reference values or cohort sizes was run to confirm this.
+\item In particular, the companion study's expectation that smaller cohorts require larger budgets is not tested here: cohort size is held fixed and only the relative gap is varied. Sweeping cohort size is the natural next step.
+\item Thirty releases per cell leaves real binomial width at boundary cells, which sharpens the qualitative shape of the curve but not the exact boundary location.
+\item The reference proportion is treated as a known constant with no uncertainty. A real check might compare against a figure that is itself estimated, for instance from census data with its own margin of error; that additional uncertainty is not modelled.
+\item The study is fully synthetic, so absolute figures such as ``a 0.1-point gap is detectable at $\epsilon = 1$'' are specific to this cohort size and reference choice and are not a general property of differentially private proportion releases.
+\item A single mechanism (Laplace on counts) and a single adjacency model (add/remove) were evaluated; no alternative subgroup-detection construction was compared.
+\end{itemize}
+
+\begin{thebibliography}{9}
+\bibitem{dwork2006} Dwork, C., McSherry, F., Nissim, K., \& Smith, A. (2006). Calibrating noise to sensitivity in private data analysis. \emph{Theory of Cryptography (TCC)}, 265--284.
+\bibitem{dwork2014} Dwork, C., \& Roth, A. (2014). The algorithmic foundations of differential privacy. \emph{Foundations and Trends in Theoretical Computer Science}, 9(3--4), 211--407.
+\bibitem{wilson1927} Wilson, E. B. (1927). Probable inference, the law of succession, and statistical inference. \emph{Journal of the American Statistical Association}, 22(158), 209--212.
+\end{thebibliography}
+
+\end{document}
