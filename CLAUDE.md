@@ -742,12 +742,67 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
 
 - **Question:** how small can a subgroup be before DP noise makes its
   underrepresentation undetectable?
+- **Threat model:** add/remove adjacency, matching
+  `privatize_categorical_proportions`'s own assumption (see the
+  adjacency-model note at the top of `src/dp_mechanisms.py`) — Study C asks
+  "how many members of this subgroup exist in the cohort," a membership
+  question, not "what is a known cohort member's sensitive attribute" (that
+  second question is Study B's, and needed a different
+  mechanism/adjacency model entirely — see Study B's Subgroup Assignment
+  Mechanism above for what went wrong there). Stated explicitly here so
+  Study C doesn't inherit `privatize_categorical_proportions` by default
+  without checking it's the right tool for its own question, the way
+  Study B initially didn't.
 - **Method:** simulate subgroup prevalences 0.5%–5% against a larger
-  synthetic reference group, using `privatize_categorical_proportions`.
-  "Detected" = the noisy proportion's confidence interval no longer overlaps
-  zero / the reference group's proportion.
+  synthetic reference group, using `privatize_categorical_proportions`,
+  with the reference cohort's total size fixed to a realistic audit scale
+  (e.g. Study B's ~4,620-patient test cohort) rather than an arbitrary
+  synthetic N — the mechanism's CI half-width scales with `1/total`, so
+  the detection floor's meaning depends on this choice being tied to
+  something the paper can defend.
+- **Detection criterion (revised):** a single closed-form CI on the
+  *difference* `proportion_subgroup − proportion_reference`, combining
+  both categories' known Laplace noise scales (both counts come from the
+  same `privatize_categorical_proportions` call, so both scales are
+  known). "Detected" = that difference-CI excludes zero. This replaces an
+  earlier draft criterion ("CI excludes zero" / "CI excludes the reference
+  group's proportion," used interchangeably) — those are two different
+  tests with opposite biases (excludes-zero is nearly always true and
+  makes DP look better at detection than it is; excludes-reference was
+  ambiguous about whether it meant the reference's point estimate or its
+  own CI). Separately, checking whether two independent per-group CIs
+  merely *overlap* each other — a tempting substitute — is a known-invalid
+  proxy for a proper difference test (roughly equivalent to testing at
+  alpha≈0.006 instead of the nominal 0.05), which would have overstated
+  how much separation DP noise requires to "hide" a subgroup.
+- **Replication:** multiple independent draws per `(epsilon,
+  true_prevalence)` cell, not a single draw — same rationale as Study B's
+  Seed Replication above: a boundary-region boolean outcome from one
+  stochastic draw can't distinguish "this epsilon/prevalence reliably
+  detects the gap" from "this particular draw happened to." Report a
+  detection *rate* per cell with a Wilson 95% CI (same construction as
+  `_wilson_ci()` in `src/run_study_b.py`), not a single boolean.
+- **False-positive control:** also run cells where `true_prevalence`
+  equals the reference proportion (no real gap), and report the rate at
+  which the difference-CI test still (incorrectly) excludes zero. Without
+  this, a detection rate reported at a real gap has no Type-I-error
+  baseline to be interpreted against.
+- **CI coverage check:** before trusting results, verify
+  `privatize_categorical_proportions`'s CI coverage specifically at the
+  low counts implied by this study's low-prevalence end (extend
+  `check_dp_mechanisms.py`'s existing coverage check into that regime) —
+  the existing check validated coverage at counts relevant to Study B's
+  use case, not necessarily the single-digit counts a 0.5% prevalence can
+  imply here.
 - **Deliverable:** `results/study_c/detection_floor.csv`
-  (`true_prevalence`, `epsilon`, `detected`, `ci_lower`, `ci_upper`).
+  (`true_prevalence`, `epsilon`, `seed`, `is_null_condition`, `true_diff`,
+  `noisy_diff`, `ci_lower`, `ci_upper`, `detected`) — one row per replicate
+  draw, covering both the real-gap cells and the null-condition cells.
+  The per-cell detection rate (with Wilson CI) and, for the
+  null-condition rows, the false-positive rate, are computed as a summary
+  and logged in CHANGELOG.md rather than saved as a separate file — same
+  canonical-file-plus-summary pattern as Study B's replication (see Study
+  B — Seed Replication above).
 
 ---
 
