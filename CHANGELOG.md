@@ -1,5 +1,38 @@
 # Changelog / Lab Notes
 
+## [Study B] 2026-08-20 (limitations caveat: reference gap is Study A's max-of-5-seeds value, not typical)
+- A review of Study B's results flagged that the fixed reference gap used
+  throughout the sweep (0.067036, from `predictions_90_10.csv`) is the
+  *largest* value in Study A's own 90/10-arm 5-training-seed replication
+  (range 0.0396-0.0670, see CLAUDE.md's Study A Seed Replication) — not a
+  central or typical one. `predictions_90_10.csv` is specifically the
+  canonical seed=42 run, which happens to sit at that range's upper end.
+- This is distinct from the already-documented bootstrap-CI caveat
+  (Study A's [0.0230, 0.1118] CI on that same point estimate) — that one
+  is sampling uncertainty on one training run's gap; this one is
+  cross-seed variance in what the "true" gap even is, driven by training
+  stochasticity alone. Both leave the 15%-of-reference tolerance band
+  less precise than it reads at face value, for different reasons.
+- **Decision: caveat only, no rework.** Discussed with Andy — reworking to
+  score against the mean/typical 5-seed gap instead would require reading
+  `results/study_a/seed_replication/`, which CLAUDE.md's Frozen Handoff
+  explicitly forbids Study B from touching (by design, to keep Study B
+  structurally unable to reach back into Study A's non-canonical output).
+  Changing that would mean revisiting the frozen-handoff rule itself, not
+  a Study B-side fix — out of scope for this pass. A sensitivity-check
+  option (re-score against a smaller seed's gap as an exploratory note,
+  same posture as Study A's own N-sensitivity check) was also considered
+  and declined for now.
+- **Change made:** two textual additions to
+  `paper/study_drafts/study_b_draft.tex`, no code/data/mechanism changes:
+  - A new Limitations bullet explaining the max-of-5-seeds issue and why
+    it's a structural property of the frozen handoff, not a fixable
+    oversight in this analysis.
+  - A caveat appended to the "Recommended framing for the eventual policy
+    text" paragraph in Implications for the policy paper, so the
+    epsilon>=6 floor is stated as conditional on this specific reference
+    value if/when it's carried into `Final_Policy_Recommendation.tex`.
+
 ## [Study B] 2026-08-19 (policy-implications section added to study_b_draft.tex)
 - Added a new final section, "Implications for the policy paper"
   (`sec:policy-implications`), to `paper/study_drafts/study_b_draft.tex`,
