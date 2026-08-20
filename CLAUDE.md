@@ -518,7 +518,13 @@ glob.
   crossover epsilon noted in CHANGELOG.md. A single canonical draw isn't
   enough to trust that crossover on its own — see Seed Replication below,
   and cite the replication's survival rate, not the canonical draw's
-  `survived` column, for any per-epsilon claim.
+  `survived` column, for any per-epsilon claim. As of 2026-08-19 the file
+  additionally carries `debiased_dp_gap`, `debiased_direction_match`,
+  `debiased_pct_diff`, `debiased_survived` — an additive, non-breaking
+  schema extension for the debiased-estimator comparison, see Debiased
+  Estimator below. These columns are scored from the *same* per-record
+  privatized draw as the original four (paired comparison), not a second
+  independent draw.
 
 ### Study B — Subgroup Assignment Mechanism (finalized, 2026-08-19, reworked same day)
 
@@ -619,18 +625,108 @@ glob.
     4 and 5, which the replication shows were overstated.
 - **Output contract:** `run_seed_replication()` writes
   `results/study_b/seed_replication/dp_gap_replication.csv` (`epsilon`,
-  `seed`, `true_gap`, `dp_gap`, `direction_match`, `pct_diff`, `survived`
-  — one row per epsilon×replicate). Not part of the frozen deliverable —
-  the canonical `epsilon_sweep_results.csv` schema is unchanged. The
+  `seed`, `true_gap`, `dp_gap`, `direction_match`, `pct_diff`, `survived`,
+  plus the `debiased_*` columns described under Deliverable above — one
+  row per epsilon×replicate). Not part of the frozen deliverable — the
+  canonical `epsilon_sweep_results.csv` schema (plus its additive
+  `debiased_*` columns) is unchanged by this file's existence. The
   summary (mean/std `dp_gap` and `pct_diff`, direction-agreement rate,
-  survival rate per epsilon) is computed by `seed_replication_summary()`
-  and reported in CHANGELOG.md, not saved as its own file — same pattern
-  as Study A's cross-seed gap spread.
+  survival rate per epsilon, for both estimators) is computed by
+  `seed_replication_summary()` and reported in CHANGELOG.md, not saved as
+  its own file — same pattern as Study A's cross-seed gap spread.
 - **Reporting:** if the paper cites a crossover epsilon or a "the gap
   survives at epsilon=X" claim, it should cite the replication's survival
   rate at that epsilon, not the canonical single draw's `survived`
   column — the canonical sweep stays useful as a reproducible point
   reference, not as the epsilon-by-epsilon narrative.
+
+### Study B — Survival-Rate Confidence Intervals (finalized, 2026-08-19)
+
+- **Why:** a review of the draft write-up (`paper/study_drafts/study_b_draft.tex`)
+  noted that the replication's per-epsilon survival *rates* — the numbers
+  actually driving the paper's headline claims at the borderline epsilons
+  (3, 4, 5) — were reported as bare point estimates with no uncertainty of
+  their own, even though `N_REPLICATION_SEEDS=30` gives a binomial SE
+  large enough to matter (e.g. ~5.5% at p=0.9) at exactly the epsilons the
+  discussion leans on most.
+- **What was added:** `seed_replication_summary()` now computes a Wilson
+  score 95% CI on `survival_rate` and on `debiased_survival_rate` (see
+  Debiased Estimator below) per epsilon, using `scipy.stats.norm` for the
+  z-value — `_wilson_ci()` in `src/run_study_b.py`. Not saved as its own
+  file; reported alongside the summary in CHANGELOG.md and cited directly
+  in the paper draft's replication table, same non-gating status as the
+  rest of the replication summary.
+- **What it shows:** the CIs are wide enough at the borderline epsilons to
+  matter for how confidently the paper can state a specific rate — e.g.
+  epsilon=3's 50.0% point estimate carries a 95% CI of roughly
+  [33%, 67%], and epsilon=4/5's 90.0% carries roughly [74%, 97%]. This
+  doesn't change the qualitative story (reliable only at epsilon>=6) but
+  means per-epsilon numbers in that borderline band should be read as
+  "consistent with," not "equal to," the point estimate.
+
+### Study B — Debiased Estimator (exploratory, 2026-08-19)
+
+- **Why:** an advisor-style review of the draft asked whether other DP
+  mechanisms might give better privacy/utility than plain per-record
+  randomized response. Rather than reopening the mechanism search (the
+  discarded aggregate-count design already showed the risk of that path —
+  see Subgroup Assignment Mechanism above), this explores a
+  *post-processing* improvement on the existing mechanism's own output:
+  since `privatize_categorical_label`'s flip probability is exactly known
+  (public), the released per-record labels can in principle be
+  reweighted to reduce the AUC gap's attenuation — at zero extra privacy
+  cost, since post-processing on already-released DP output is free under
+  DP's post-processing immunity (never touches `true_sex`).
+- **Method tried:** for each privatized draw, invert the classic
+  Warner/randomized-response formula on the draw's own *aggregate*
+  observed rate to estimate the true population majority-share (a
+  deterministic function of the already-released labels, not of
+  `true_sex` — still free post-processing), then compute each patient's
+  Bayesian posterior P(true=majority | observed label, known flip
+  probability, that population estimate), and recompute the subgroup AUC
+  gap by calling `sklearn.roc_auc_score(..., sample_weight=posterior_weight)`
+  instead of hard-assigning subgroups from the raw privatized label.
+  Implemented as `_debiased_subgroup_auc_gap()` in `src/run_study_b.py`,
+  scored from the *same* privatized draw as the naive estimator (paired
+  comparison — both `_evaluate_draw()` outputs come from one
+  `privatize_subgroups()` call), so any difference reflects the
+  estimator, not draw-to-draw noise.
+- **Result: this did not help — it was slightly worse across almost the
+  entire sweep, not better.** The debiased canonical-draw and
+  replication-based crossover epsilon both moved from 3.0 to 4.0 (worse,
+  not better), and at every epsilon below 5 the debiased survival rate
+  was equal to or lower than the naive one (e.g. epsilon=2: naive 36.7%
+  vs. debiased 3.3%; epsilon=0.1-1: naive 3.3-10.0% vs. debiased 0.0% at
+  all three). The two estimators only converge once epsilon>=5, where the
+  naive estimator was already reliable anyway.
+- **Why it didn't help (two compounding reasons, not a bug):**
+  1. The population-share correction inverts observed_rate by dividing by
+     `(2*keep_prob - 1)`, which shrinks toward 0 as epsilon shrinks toward
+     0 (keep_prob toward 0.5) — exactly where debiasing would matter most,
+     the correction itself becomes a high-variance, easily-clipped
+     estimate (confirmed: it collapses to 0 or 1 often enough at low
+     epsilon to make the posterior weight nearly degenerate).
+  2. More fundamentally, AUC is a pairwise/rank statistic, not a linear
+     functional of per-record labels — unlike a mean or a proportion,
+     reweighting the *instances* fed into `roc_auc_score` does not
+     correctly reweight the *pairs* the statistic is actually computed
+     over. Because the posterior weight here takes only two values across
+     the whole cohort (a function solely of each patient's own observed
+     label, not of anything else about them), the weighted statistic
+     decomposes into a mixture of the observed-majority-only AUC, the
+     observed-minority-only AUC, and cross-group pair terms — not a clean
+     debiased estimate of the true-majority-only AUC. A correct
+     pairwise-level correction would need to reweight comparisons, not
+     instances; that was judged out of scope here (see Limitations in the
+     paper draft) rather than attempted.
+- **Decision:** kept in the codebase and reported as a genuine negative
+  result — it directly answers the "should we try other mechanisms"
+  question with a concrete, honest no for this variant, and the paired
+  same-draw design means the comparison itself is trustworthy even though
+  the estimator isn't an improvement. `EPSILON_SWEEP` and the primary
+  mechanism (`privatize_categorical_label`, hard-assignment scoring) are
+  unchanged; this is purely an additional analysis on already-collected
+  draws, not a replacement.
 
 ---
 

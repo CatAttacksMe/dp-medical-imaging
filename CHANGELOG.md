@@ -1,5 +1,75 @@
 # Changelog / Lab Notes
 
+## [Study B] 2026-08-19 (Wilson CIs on survival rate; debiased-estimator comparison, negative result)
+- Follow-up to an advisor-style review of `study_b_draft.tex`, addressing
+  two points raised: (1) whether the replication's reported survival
+  rates need their own uncertainty given the paper's headline claims rest
+  on the borderline epsilons (3, 4, 5); (2) whether other DP mechanisms
+  should be explored for better privacy/utility. See CLAUDE.md's new
+  "Survival-Rate Confidence Intervals" and "Debiased Estimator"
+  subsections under Study B for full detail — summarized here.
+- **Wilson CIs.** `seed_replication_summary()` in `src/run_study_b.py` now
+  computes a Wilson score 95% CI (`scipy.stats.norm`) on `survival_rate`
+  (and on the new `debiased_survival_rate`, below) per epsilon. At
+  n=30 replicates, the borderline points carry real width: epsilon=3's
+  50.0% point estimate is [33.2%, 66.8%]; epsilon=4 and 5's 90.0% is each
+  [74.4%, 96.5%]. Doesn't change the qualitative story (reliable only at
+  epsilon>=6) but the paper draft's per-epsilon numbers in the 0.5-5 band
+  should now be read with these bands attached, not as exact rates.
+- **Debiased estimator — tried, and it did not help.** Implemented
+  `_debiased_subgroup_auc_gap()`: reweights each privatized draw's
+  patients by their Bayesian posterior P(true=majority | observed label),
+  using a population-share prior obtained by inverting the draw's own
+  observed aggregate rate (classic Warner/randomized-response inversion)
+  — built entirely from the already-released privatized labels, so this
+  is free post-processing on the existing epsilon-DP release, not a
+  second mechanism or a second privacy cost. Scored from the *same*
+  privatized draw as the naive hard-assignment estimator (paired
+  comparison, both come from one `privatize_subgroups()` call per draw),
+  not an independent redraw.
+  - **Result:** slightly worse than the naive estimator across almost the
+    whole sweep, not better. Both the canonical-draw and replication-based
+    crossover epsilon moved from 3.0 (naive) to 4.0 (debiased) — the wrong
+    direction. Debiased survival rate is <= the naive rate at every
+    epsilon below 5 (e.g. epsilon=2: naive 36.7% vs. debiased 3.3%;
+    epsilon=0.1/0.5/1.0: naive 3.3%/10.0%/6.7% vs. debiased 0.0% at all
+    three). The two converge only once epsilon>=5, where naive was
+    already reliable.
+  - **Why:** two compounding reasons, not a bug — (1) the population-share
+    correction divides by `(2*keep_prob - 1)`, which shrinks toward 0 as
+    epsilon shrinks, making the correction itself high-variance and prone
+    to clipping to 0/1 exactly where debiasing would matter most; (2) more
+    fundamentally, AUC is a pairwise/rank statistic, so reweighting
+    *instances* fed into `roc_auc_score` (via `sample_weight`) does not
+    correctly reweight the *pairs* the statistic is computed over —
+    unlike debiasing a mean or a proportion, this requires a
+    pair-level correction that wasn't attempted here (out of scope,
+    logged as a limitation in the paper draft).
+  - **Decision:** kept as a genuine negative result, not discarded —
+    it's a direct, honest answer to "should we explore other mechanisms"
+    for this specific idea. `privatize_categorical_label` and the
+    original hard-assignment scoring remain Study B's primary mechanism
+    and result; nothing about the canonical sweep or its crossover
+    (epsilon=3.0) changed.
+- **Schema (additive, non-breaking):** both
+  `results/study_b/epsilon_sweep_results.csv` and
+  `results/study_b/seed_replication/dp_gap_replication.csv` gained
+  `debiased_dp_gap`, `debiased_direction_match`, `debiased_pct_diff`,
+  `debiased_survived` columns, scored from the same draw as the existing
+  four columns. The replication summary gained
+  `debiased_dp_gap_mean/std`, `debiased_pct_diff_mean/std`,
+  `debiased_direction_agreement_rate`, `debiased_survival_rate`, and
+  Wilson CI columns for both `survival_rate` and `debiased_survival_rate`.
+  Re-ran `src/run_study_b.py` end to end to regenerate both CSVs under
+  the new schema — no change to `true_gap` (0.067036) or any existing
+  naive-column value, confirming the additions are purely additive.
+- Updated `paper/study_drafts/study_b_draft.tex`: CIs added to the
+  replication table, a new Discussion paragraph connecting Study A's gap
+  bootstrap CI ([0.0230, 0.1118]) to the 15%-of-true-gap tolerance band
+  ([0.057, 0.077] — narrower than Study A's own estimation uncertainty on
+  the reference value), and a new section reporting the debiased-estimator
+  comparison and its negative result.
+
 ## [Study B] 2026-08-19 (add draft findings write-up, paper/study_drafts/study_b_draft.tex)
 - Wrote `paper/study_drafts/study_b_draft.tex`, mirroring Study A's draft
   format/tone (internal, numbers-focused results record, not paper prose):
