@@ -1,5 +1,37 @@
 # Changelog / Lab Notes
 
+## [Study B] 2026-08-19 (policy-implications section added to study_b_draft.tex)
+- Added a new final section, "Implications for the policy paper"
+  (`sec:policy-implications`), to `paper/study_drafts/study_b_draft.tex`,
+  recording Study B's own read on how its results bear on
+  `paper/Final_Policy_Recommendation.tex` — that file stays untouched
+  until all three studies finish (per CLAUDE.md), but the current draft
+  already stakes out claims this study speaks to directly, so the
+  analysis is captured now rather than re-derived later.
+- **Verdict recorded: qualified support, not blanket support.** epsilon>=6
+  gives Study B a project-specific result to back the policy draft's
+  "moderate privacy settings preserve utility" rebuttal (currently backed
+  only by an external review citation) — but epsilon>=6 is a loose budget
+  by DP convention, wider than what "moderate" usually connotes, so the
+  claim needs an explicit, scoped floor rather than staying general.
+  Below epsilon~3, and especially at epsilon<=1 (10-30% wrong-direction
+  rate), Study B is a concrete instance of the exact risk the policy
+  draft's "Small Populations Are Harmed by the Noise" section already
+  footnotes ("differential privacy can even widen the subgroup
+  performance gaps"). The debiased-estimator negative result also closes
+  off "just correct for the noise after the fact" as an escape hatch for
+  low-epsilon utility.
+- **Recommended framing given to the policy draft:** state the floor
+  explicitly (epsilon roughly >=6 for reliable subgroup audits on a
+  cohort this size — 4,620 patients, 2,150-patient minority group) rather
+  than an unqualified "moderate settings work," and don't generalize past
+  this study's scope (single dataset/label/mechanism/imbalance-arm) —
+  Study C's small-subgroup detection floor should be expected to push the
+  needed epsilon higher, not lower, for smaller cohorts.
+- No numeric/code changes — this is Study B's own narrative read on
+  already-collected results, kept in the same draft file per the user's
+  request rather than split into a separate document.
+
 ## [Study B] 2026-08-19 (Wilson CIs on survival rate; debiased-estimator comparison, negative result)
 - Follow-up to an advisor-style review of `study_b_draft.tex`, addressing
   two points raised: (1) whether the replication's reported survival
