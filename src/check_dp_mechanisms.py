@@ -168,6 +168,39 @@ def proportions_ci_achieves_nominal_coverage():
 
 
 @check
+def proportions_ci_achieves_nominal_coverage_at_low_counts():
+    """Study C's low-prevalence sweep (0.5% of a ~4,620-patient cohort is
+    ~23 records) implies much smaller counts than
+    proportions_ci_achieves_nominal_coverage above validates (true_count=50
+    of total=1000). Clipping to [0, 1] engages more often at small
+    counts/low epsilon, which can bias coverage away from nominal in a way
+    the larger-count check wouldn't reveal — this re-runs the same
+    coverage test at Study C's actual low end rather than assuming the
+    check above generalizes down. See CLAUDE.md, Study C — CI coverage
+    check."""
+    total, confidence, n_trials = 4620, 0.95, 3000
+    true_count = round(0.005 * total)  # ~23 — Study C's lowest swept prevalence
+    true_proportion = true_count / total
+
+    for epsilon in (0.5, 1.0, 2.0):
+        hits = 0
+        for seed in range(n_trials):
+            result = dp.privatize_categorical_proportions(
+                {"subgroup": true_count}, epsilon=epsilon, total=total, confidence=confidence, random_state=seed
+            )["subgroup"]
+            if result["ci_lower"] <= true_proportion <= result["ci_upper"]:
+                hits += 1
+        coverage = hits / n_trials
+        # Binomial SE at p=0.95, n=3000 is ~0.4%; allow +/-3% (looser than
+        # the large-count check's +/-2%, since this checks 3 epsilons
+        # against one true_count rather than one epsilon).
+        assert abs(coverage - confidence) < 0.03, (
+            f"epsilon={epsilon}: empirical coverage {coverage:.3f} at true_count={true_count} "
+            f"(Study C's low end), expected ~{confidence}"
+        )
+
+
+@check
 def label_flip_probability_matches_theory():
     """The core correctness check for privatize_categorical_label: kept
     probability should match e^epsilon / (1 + e^epsilon), the standard

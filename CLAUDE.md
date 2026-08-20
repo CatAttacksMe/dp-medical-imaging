@@ -753,28 +753,45 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
   Study C doesn't inherit `privatize_categorical_proportions` by default
   without checking it's the right tool for its own question, the way
   Study B initially didn't.
-- **Method:** simulate subgroup prevalences 0.5%–5% against a larger
-  synthetic reference group, using `privatize_categorical_proportions`,
-  with the reference cohort's total size fixed to a realistic audit scale
-  (e.g. Study B's ~4,620-patient test cohort) rather than an arbitrary
-  synthetic N — the mechanism's CI half-width scales with `1/total`, so
-  the detection floor's meaning depends on this choice being tied to
-  something the paper can defend.
-- **Detection criterion (revised):** a single closed-form CI on the
-  *difference* `proportion_subgroup − proportion_reference`, combining
-  both categories' known Laplace noise scales (both counts come from the
-  same `privatize_categorical_proportions` call, so both scales are
-  known). "Detected" = that difference-CI excludes zero. This replaces an
-  earlier draft criterion ("CI excludes zero" / "CI excludes the reference
-  group's proportion," used interchangeably) — those are two different
-  tests with opposite biases (excludes-zero is nearly always true and
-  makes DP look better at detection than it is; excludes-reference was
-  ambiguous about whether it meant the reference's point estimate or its
-  own CI). Separately, checking whether two independent per-group CIs
-  merely *overlap* each other — a tempting substitute — is a known-invalid
-  proxy for a proper difference test (roughly equivalent to testing at
-  alpha≈0.006 instead of the nominal 0.05), which would have overstated
-  how much separation DP noise requires to "hide" a subgroup.
+- **Method (revised, 2026-08-20):** "reference group" is a **fixed,
+  public, non-privatized reference proportion** — an external "expected/
+  unbiased" share (e.g. a known population-level demographic figure), not
+  a second synthetic group drawn from the same audited cohort. Only the
+  audited cohort's own subgroup count is sensitive and gets privatized;
+  the reference figure needs no protection and no privacy budget. An
+  earlier reading of this section treated "reference group" as the
+  subgroup's complement within one cohort (subgroup vs. everyone else,
+  e.g. 2% vs. 98%) — that framing was rejected before implementation: at
+  that separation, a difference test would report "detected" at almost
+  any epsilon, so it wouldn't actually test detectability of
+  underrepresentation, just confirm the subgroup is a minority by
+  construction. `true_prevalence` (the audited cohort's actual
+  composition, swept 0.5%–5%) is tested against `REFERENCE_PROPORTION`
+  fixed at the top of that sweep (5%) — values below it simulate varying
+  degrees of real underrepresentation, and `true_prevalence ==
+  REFERENCE_PROPORTION` (the 5% cell) doubles as the false-positive
+  control below, rather than needing a separately-run condition. The
+  cohort's total size is fixed to a realistic audit scale (Study B's
+  ~4,620-patient test cohort) rather than an arbitrary synthetic N — the
+  mechanism's CI half-width scales with `1/total`, so the detection
+  floor's meaning depends on this choice being tied to something the
+  paper can defend.
+- **Detection criterion (revised):** a standard one-sample test — call
+  `privatize_categorical_proportions({"subgroup": true_count}, epsilon,
+  total=4620, ...)` (single category, explicit `total`, same pattern as
+  `privatize_age_mean`'s "cohort size is public, only the statistic is
+  privatized" convention) and check whether the subgroup's own closed-form
+  CI excludes the known constant `REFERENCE_PROPORTION`. "Detected" = CI
+  does not contain `REFERENCE_PROPORTION`. This replaced two earlier,
+  broken readings of the criterion: (1) "CI excludes zero" / "CI excludes
+  the reference proportion" used interchangeably — different tests with
+  opposite biases (excludes-zero is nearly always true and makes DP look
+  better at detection than it is); (2) a difference-of-two-*noisy*-
+  proportions construction, which was only needed under the rejected
+  self-complement reading above — with the reference now a known
+  constant rather than a second privatized draw, no two-CI-overlap or
+  difference-CI machinery is needed at all; a plain one-sample interval
+  containment check is already correctly calibrated.
 - **Replication:** multiple independent draws per `(epsilon,
   true_prevalence)` cell, not a single draw — same rationale as Study B's
   Seed Replication above: a boundary-region boolean outcome from one
@@ -782,11 +799,11 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
   detects the gap" from "this particular draw happened to." Report a
   detection *rate* per cell with a Wilson 95% CI (same construction as
   `_wilson_ci()` in `src/run_study_b.py`), not a single boolean.
-- **False-positive control:** also run cells where `true_prevalence`
-  equals the reference proportion (no real gap), and report the rate at
-  which the difference-CI test still (incorrectly) excludes zero. Without
-  this, a detection rate reported at a real gap has no Type-I-error
-  baseline to be interpreted against.
+- **False-positive control:** the `true_prevalence == REFERENCE_PROPORTION`
+  cell (no real gap) reports the rate at which the CI test still
+  (incorrectly) excludes the reference proportion. Without this, a
+  detection rate reported at a real gap has no Type-I-error baseline to
+  be interpreted against.
 - **CI coverage check:** before trusting results, verify
   `privatize_categorical_proportions`'s CI coverage specifically at the
   low counts implied by this study's low-prevalence end (extend
@@ -795,12 +812,13 @@ synthetic — zero dependency on real ChestX-ray14 data or any trained model.
   use case, not necessarily the single-digit counts a 0.5% prevalence can
   imply here.
 - **Deliverable:** `results/study_c/detection_floor.csv`
-  (`true_prevalence`, `epsilon`, `seed`, `is_null_condition`, `true_diff`,
-  `noisy_diff`, `ci_lower`, `ci_upper`, `detected`) — one row per replicate
-  draw, covering both the real-gap cells and the null-condition cells.
-  The per-cell detection rate (with Wilson CI) and, for the
-  null-condition rows, the false-positive rate, are computed as a summary
-  and logged in CHANGELOG.md rather than saved as a separate file — same
+  (`true_prevalence`, `epsilon`, `seed`, `is_null_condition`, `noisy_count`,
+  `noisy_proportion`, `ci_lower`, `ci_upper`, `detected`) — one row per
+  replicate draw, covering both the real-gap cells and the
+  `true_prevalence == REFERENCE_PROPORTION` null-condition cell. The
+  per-cell detection rate (with Wilson CI) and, for the null-condition
+  rows, the false-positive rate, are computed as a summary and logged in
+  CHANGELOG.md rather than saved as a separate file — same
   canonical-file-plus-summary pattern as Study B's replication (see Study
   B — Seed Replication above).
 
