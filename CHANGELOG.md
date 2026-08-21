@@ -73,10 +73,9 @@
   table. The qualitative claim — direction is unreliable at low
   epsilon — is unaffected; the epsilon=1 case is less severe than the
   prose implied.
-- **Still stale elsewhere:** CLAUDE.md's Study B — Seed Replication
-  section also carries the "66% at 1.0" figure. Not edited here, since
-  CLAUDE.md is project instructions rather than a study draft — worth a
-  one-line correction next time that file is touched.
+- CLAUDE.md's Study B — Seed Replication section carried the same stale
+  "66% at 1.0" figure and is now corrected to match the CSV (70% at 0.1,
+  73% at 0.5, 90% at 1.0, 96.7% at 2.0, 100% from epsilon=3 up).
 
 ## [Study C] 2026-08-20 (results review: fixed 3 methodology gaps found by re-checking the initial pass)
 - A results review (before writing `study_c_draft.tex`) re-verified the

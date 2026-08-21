@@ -609,10 +609,10 @@ glob.
   - **Direction is unreliable at low epsilon too, not just magnitude** —
     the canonical draw showed `direction_match=True` at every epsilon
     including 0.1, which the original write-up reported at face value.
-    Across 30 replicates, direction agreement is only 70% at epsilon=0.1,
-    73% at 0.5, 66% at 1.0 (rising to 100% by epsilon=3). The single draw
-    happening to get direction right at 0.1 was luck, not a property of
-    that epsilon.
+    Across 30 replicates, direction agreement is only 70% at epsilon=0.1
+    and 73% at 0.5, recovering to 90% at 1.0 and 96.7% at 2.0 (100% from
+    epsilon=3 up). The single draw happening to get direction right at
+    0.1 was luck, not a property of that epsilon.
   - **The apparent stability at epsilon=4 and 5 in the single-draw table
     was also luck.** Survival *rate* across 30 replicates is 90% at both
     — not the 100%-looking "True, pct_diff=1.3%/0.3%" the canonical draw
