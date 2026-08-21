@@ -33,10 +33,12 @@
   rather than copied from the drafts (see the two entries below for what
   that turned up).
 
-## [Study A] 2026-08-20 (two reporting discrepancies found in `study_a_draft.tex` — noted, not fixed)
-- Found while re-deriving numbers for `paper/study_a.tex`; left in place
-  per CLAUDE.md's "don't edit another study's owned files in passing"
-  rule. Neither changes any Study A conclusion.
+## [Study A] 2026-08-20 (two reporting discrepancies found in `study_a_draft.tex` — now fixed)
+- Found while re-deriving numbers for `paper/study_a.tex`. Initially
+  logged as noted-but-unfixed per CLAUDE.md's "don't edit another
+  study's owned files in passing" rule; Andy then asked for them to be
+  fixed in the drafts too, so both are now corrected in
+  `study_a_draft.tex`. Neither changes any Study A conclusion.
 - **Run count understated.** The draft's Discussion says "18 independent
   training runs total, zero direction reversals." Recomputing the
   subgroup gap from every committed predictions CSV gives **23** runs —
@@ -44,14 +46,20 @@
   70/30 and 6 at 50/50 (3 canonical-N + 3 at N=5,000 each). Direction
   agreement is 23/23, so the claim strengthens rather than weakens.
   `paper/study_a.tex` reports 23.
-- **Cross-split mean averages a different set than its stated range.**
-  The draft's robustness table reports cross-split mean 0.0716 with
-  range [0.0657, 0.0815]. The mean is over 4 values (the 3 alternate
-  splits *plus* the canonical split); the range is over the 3 alternates
-  only. Mean of the 3 alternates alone is 0.0731. `paper/study_a.tex`
-  reports 0.0731 so that the mean and range describe the same set.
+- **Cross-split row is mislabelled, not miscalculated.** The draft's
+  robustness table reports cross-split mean 0.0716, range
+  [0.0657, 0.0815], direction agreement "True (3/3)", on a row labelled
+  "splits 101--103". `_gap_spread` in `src/metrics.py` computes mean,
+  min, and max over `[canonical_gap] + other_gaps`, so all three
+  statistics cover **4** runs (canonical split + splits 101--103), not
+  3 — the mean and range are mutually consistent and match the code;
+  only the row label and the "3/3" count understate the set. (The range
+  hides this because the canonical gap, 0.0670, falls inside the
+  alternates' own range.) Row relabelled "canonical + splits 101--103"
+  with 4/4, and the caption now states the convention explicitly and
+  gives the 3-alternate mean (0.0731) for reference.
 
-## [Study B] 2026-08-20 (stale direction-agreement figure in `study_b_draft.tex` prose — noted, not fixed)
+## [Study B] 2026-08-20 (stale direction-agreement figure in `study_b_draft.tex` prose — now fixed)
 - The draft's Discussion prose says direction agreement is "66--90\%
   through epsilon=1--2"; CLAUDE.md's Study B — Seed Replication section
   likewise says "66% at 1.0". Recomputing from
@@ -60,9 +68,15 @@
   replication *table* already reports 90.0% correctly — only the prose
   summary and the CLAUDE.md note carry the stale 66% figure.
 - `paper/study_b.tex` uses the CSV-derived values throughout (70.0% at
-  0.1, 73.3% at 0.5, 90.0% at 1.0, 96.7% at 2.0, 100% at epsilon>=3).
-  The qualitative claim — direction is unreliable at low epsilon — is
-  unaffected; the epsilon=1 case is less severe than the prose implied.
+  0.1, 73.3% at 0.5, 90.0% at 1.0, 96.7% at 2.0, 100% at epsilon>=3),
+  and the draft's prose sentence is now corrected to match its own
+  table. The qualitative claim — direction is unreliable at low
+  epsilon — is unaffected; the epsilon=1 case is less severe than the
+  prose implied.
+- **Still stale elsewhere:** CLAUDE.md's Study B — Seed Replication
+  section also carries the "66% at 1.0" figure. Not edited here, since
+  CLAUDE.md is project instructions rather than a study draft — worth a
+  one-line correction next time that file is touched.
 
 ## [Study C] 2026-08-20 (results review: fixed 3 methodology gaps found by re-checking the initial pass)
 - A results review (before writing `study_c_draft.tex`) re-verified the

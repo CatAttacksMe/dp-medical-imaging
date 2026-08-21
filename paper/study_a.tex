@@ -79,10 +79,10 @@ At the 90/10 ratio the model achieves a patient-level AUC of 0.9178 on male pati
 Check & Reference run & Mean & Range & Direction agreement \\
 \midrule
 Training seeds (42--46) & 0.0670 & 0.0535 & [0.0396, 0.0670] & 5/5 \\
-Patient splits (101--103) & 0.0670 & 0.0731 & [0.0657, 0.0815] & 3/3 \\
+Patient splits (canonical + 101--103) & 0.0670 & 0.0716 & [0.0657, 0.0815] & 4/4 \\
 \bottomrule
 \end{tabular}
-\caption{90/10 gap under varying training stochasticity and varying test-set composition.}
+\caption{90/10 gap under varying training stochasticity and varying test-set composition. Each row's mean, range, and direction agreement are computed over the reference run together with that row's replicates: 5 runs for the seed row (seed 42 is the reference run) and 4 for the split row. Over the 3 alternate splits alone the mean is 0.0731.}
 \label{tab:robustness}
 \end{table}
 
