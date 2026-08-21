@@ -109,7 +109,7 @@ Epsilon & Mean DP gap (SD) & Mean pct.\ diff. & Direction agreement & Survival r
 \textbf{The replication changed the headline, not just the error bars.} Two claims that read cleanly off the single canonical draw (Table~\ref{tab:canonical-sweep}) do not hold up:
 
 \begin{itemize}
-\item \emph{Direction is unreliable at low epsilon, not just magnitude.} The canonical draw showed \texttt{direction\_match=True} at every epsilon, including 0.1. Across 30 replicates, direction agreement is only 70\% at epsilon=0.1, 73\% at 0.5, 66--90\% through epsilon=1--2 (Table~\ref{tab:replication}). The single draw getting direction right at low epsilon was luck, not a property of that epsilon.
+\item \emph{Direction is unreliable at low epsilon, not just magnitude.} The canonical draw showed \texttt{direction\_match=True} at every epsilon, including 0.1. Across 30 replicates, direction agreement is only 70\% at epsilon=0.1 and 73\% at 0.5, recovering to 90\% at epsilon=1 and 96.7\% at epsilon=2 (Table~\ref{tab:replication}). The single draw getting direction right at low epsilon was luck, not a property of that epsilon.
 \item \emph{Epsilon=4 and 5 are not the stable points the canonical draw suggested.} The canonical draw reported \texttt{survived=True} with pct.\ diff.\ of 1.3\% and 0.3\% at epsilon=4 and 5 respectively --- numbers that look like a settled result. The replication shows only 90\% survival at each: 1 in 10 draws at those exact epsilon values does not survive. Epsilon=3 is a near-exact coin flip (50.0\% survival). Only epsilon $\geq6$ reaches 100\% survival across all 30 replicates.
 \end{itemize}
 
