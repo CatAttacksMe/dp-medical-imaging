@@ -82,10 +82,10 @@ CI excludes zero & Yes \\
 Check & Canonical & Mean & Range & Direction agreement \\
 \midrule
 Cross-seed (5 seeds: 42--46) & 0.0670 & 0.0535 & [0.0396, 0.0670] & True (5/5) \\
-Cross-split (splits 101--103, seed 42) & 0.0670 & 0.0716 & [0.0657, 0.0815] & True (3/3) \\
+Cross-split (canonical + splits 101--103) & 0.0670 & 0.0716 & [0.0657, 0.0815] & True (4/4) \\
 \bottomrule
 \end{tabular}
-\caption{90/10 arm robustness checks: varying training stochasticity (cross-seed) and varying which patients land in test (cross-split). Both non-gating.}
+\caption{90/10 arm robustness checks: varying training stochasticity (cross-seed) and varying which patients land in test (cross-split). Both non-gating. Following \texttt{\_gap\_spread} in \texttt{src/metrics.py}, the Mean, Range, and direction-agreement columns are computed over the canonical run \emph{plus} the replicates in each row, so the cross-seed row covers 5 runs (seed 42 is the canonical one) and the cross-split row covers 4 (canonical split + splits 101--103). The mean over the 3 alternate splits alone would be 0.0731.}
 \label{tab:robustness}
 \end{table}
 
@@ -207,7 +207,7 @@ Arm & Mean gap, $N=5{,}000$ & Mean gap, canonical $N=11{,}664$ \\
 
 \section{Discussion}
 
-\textbf{Oracle status.} The direction half of the test oracle passes and is robust: majority AUC exceeds minority AUC in every one of the runs reported here (canonical, 5 cross-seed, 3 cross-split, and all 9 $N=5{,}000$ runs — 18 independent training runs total, zero direction reversals at the 90/10 ratio). The magnitude half was checked manually against Larrazabal et al.'s Figure 1 (Section~\ref{sec:magnitude}) and does not pass the originally planned 2-AUC-point tolerance — the reproduced gap is roughly half to a third of the Larrazabal-equivalent value at the nearest comparable training compositions. This is reported as an honest limitation of the reproduction, not concealed: direction transfers cleanly to this pipeline, magnitude does not, and the two studies' different variance-estimation protocols (20-fold aggregation vs.\ this study's seed/split replication) mean the discrepancy is not fully resolved by this analysis alone.
+\textbf{Oracle status.} The direction half of the test oracle passes and is robust: majority AUC exceeds minority AUC in every one of the 23 independent training runs reported here — 11 at the 90/10 ratio (5 training seeds incl.\ canonical, 3 alternate splits, 3 at $N=5{,}000$) and 6 at each of the 70/30 and 50/50 ratios (3 canonical-$N$ seeds + 3 at $N=5{,}000$) — with zero direction reversals in any of them. The magnitude half was checked manually against Larrazabal et al.'s Figure 1 (Section~\ref{sec:magnitude}) and does not pass the originally planned 2-AUC-point tolerance — the reproduced gap is roughly half to a third of the Larrazabal-equivalent value at the nearest comparable training compositions. This is reported as an honest limitation of the reproduction, not concealed: direction transfers cleanly to this pipeline, magnitude does not, and the two studies' different variance-estimation protocols (20-fold aggregation vs.\ this study's seed/split replication) mean the discrepancy is not fully resolved by this analysis alone.
 
 \textbf{What is robust.} The 90/10 arm's gap is clearly and consistently the largest of the three ratios, across the canonical run, both robustness checks, and the independent $N=5{,}000$ sensitivity pass.
 
